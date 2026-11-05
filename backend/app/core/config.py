@@ -77,6 +77,36 @@ class Settings(BaseSettings):
     def simulator_active(self) -> bool:
         return self.simulator_enabled and not self.is_production
 
+    def production_problems(self) -> list[str]:
+        """Configurazioni mancanti o errate che impediscono un avvio sicuro in
+        production. Nessun valore segreto compare nei messaggi."""
+        problems: list[str] = []
+
+        def public_https(name: str, url: str) -> None:
+            if not url.startswith("https://") or "localhost" in url or "127.0.0.1" in url:
+                problems.append(f"{name} deve essere un URL pubblico https:// (attuale: {url or 'vuoto'})")
+
+        public_https("SUPABASE_URL", self.supabase_url)
+        public_https("FRONTEND_URL", self.frontend_url)
+        public_https("PUBLIC_BASE_URL", self.public_base_url)
+        if not self.supabase_service_role_key.get_secret_value():
+            problems.append("SUPABASE_SERVICE_ROLE_KEY mancante")
+        if not (self.groq_api_key.get_secret_value() or self.gemini_api_key.get_secret_value()):
+            problems.append("serve almeno una chiave LLM (GROQ_API_KEY o GEMINI_API_KEY)")
+        try:
+            from cryptography.fernet import Fernet
+
+            Fernet(self.encryption_key.get_secret_value().encode())
+        except ValueError:
+            problems.append("ENCRYPTION_KEY mancante o non valida (chiave Fernet)")
+        if self.google_client_id:
+            if not self.google_client_secret.get_secret_value():
+                problems.append("GOOGLE_CLIENT_SECRET mancante")
+            expected = f"{self.public_base_url.rstrip('/')}/oauth/google/callback"
+            if self.google_redirect_uri != expected:
+                problems.append(f"GOOGLE_REDIRECT_URI deve essere {expected}")
+        return problems
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -11,6 +11,9 @@ from backend.app.core.logging import setup_logging
 def create_app() -> FastAPI:
     settings = get_settings()
     setup_logging(settings.log_level)
+    if settings.is_production and (problems := settings.production_problems()):
+        # Meglio non partire che girare con webhook/OAuth configurati male.
+        raise RuntimeError("Configurazione di produzione non valida:\n- " + "\n- ".join(problems))
 
     app = FastAPI(
         title="WhatsApp AI Booking API",

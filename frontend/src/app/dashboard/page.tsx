@@ -57,7 +57,8 @@ async function Overview() {
       .eq("mode", "manual")
       .order("last_message_at", { ascending: false })
       .limit(5),
-    backendFetch<GoogleStatus>(`/api/tenants/${tenant.id}/google`).catch(() => null),
+    // Solo per la checklist: non bloccare la panoramica se il backend si sta risvegliando.
+    backendFetch<GoogleStatus>(`/api/tenants/${tenant.id}/google`, {}, { timeoutMs: 4_000 }).catch(() => null),
   ]);
 
   const serviceNames = await loadServiceNames(tenant.id, upcoming.data?.map((b) => b.service_id));

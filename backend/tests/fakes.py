@@ -210,3 +210,19 @@ class RecordingNotifier:
         reason: str,
     ) -> None:
         self.calls.append((conversation.id, reason))
+
+
+# Variabili d'ambiente minime e valide per avviare l'app in production nei test
+# (valori fittizi: nessun servizio reale viene contattato).
+PRODUCTION_ENV: dict[str, str] = {
+    "ENVIRONMENT": "production",
+    "SUPABASE_URL": "https://example.supabase.co",
+    "SUPABASE_SERVICE_ROLE_KEY": "sb_secret_test",
+    "FRONTEND_URL": "https://dashboard.example.com",
+    "PUBLIC_BASE_URL": "https://api.example.com",
+    "GROQ_API_KEY": "gsk_test",
+    "ENCRYPTION_KEY": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+    "GOOGLE_CLIENT_ID": "client-id",
+    "GOOGLE_CLIENT_SECRET": "client-secret",
+    "GOOGLE_REDIRECT_URI": "https://api.example.com/oauth/google/callback",
+}

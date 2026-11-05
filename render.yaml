@@ -1,5 +1,7 @@
 # Blueprint Render (piano Free) per il backend FastAPI.
 # Le variabili con `sync: false` vanno impostate a mano nella dashboard di Render.
+# In production l'app NON parte se mancano SUPABASE_*, PUBLIC_BASE_URL, FRONTEND_URL
+# (https), una chiave LLM o ENCRYPTION_KEY: il motivo è scritto nei log di Render.
 services:
   - type: web
     name: whatsapp-booking-api
@@ -14,6 +16,8 @@ services:
         value: "3.12.7"
       - key: ENVIRONMENT
         value: production
+      - key: SIMULATOR_ENABLED
+        value: "false"
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY

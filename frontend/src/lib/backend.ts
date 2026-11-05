@@ -7,7 +7,12 @@ import { createClient } from "@/lib/supabase/server";
  * Il backend verifica il token con Supabase Auth e l'appartenenza all'attività.
  */
 
-const API_URL = process.env.API_URL ?? "http://localhost:8000";
+// Su Vercel API_URL è obbligatorio: senza, le chiamate (con il token dell'utente)
+// finirebbero su localhost. In locale il default è il backend su :8000.
+const API_URL = process.env.API_URL ?? (process.env.VERCEL ? undefined : "http://localhost:8000");
+
+/** Render (piano Free) si sospende dopo 15 minuti: il risveglio può durare ~50 secondi. */
+const DEFAULT_TIMEOUT_MS = 60_000;
 
 export class BackendError extends Error {
   constructor(
@@ -18,7 +23,14 @@ export class BackendError extends Error {
   }
 }
 
-export async function backendFetch<T>(path: string, init: RequestInit = {}): Promise<T | null> {
+export async function backendFetch<T>(
+  path: string,
+  init: RequestInit = {},
+  { timeoutMs = DEFAULT_TIMEOUT_MS }: { timeoutMs?: number } = {},
+): Promise<T | null> {
+  if (!API_URL) {
+    throw new BackendError("Backend non configurato (API_URL mancante).", 500);
+  }
   const supabase = await createClient();
   const {
     data: { session },
@@ -32,14 +44,18 @@ export async function backendFetch<T>(path: string, init: RequestInit = {}): Pro
     response = await fetch(`${API_URL}${path}`, {
       ...init,
       cache: "no-store",
+      signal: AbortSignal.timeout(timeoutMs),
       headers: {
         ...init.headers,
         Authorization: `Bearer ${session.access_token}`,
         "Content-Type": "application/json",
       },
     });
-  } catch {
-    throw new BackendError("Backend non raggiungibile: è avviato su " + API_URL + "?", 503);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new BackendError("Il server si sta avviando: riprova tra qualche secondo.", 504);
+    }
+    throw new BackendError("Backend non raggiungibile: riprova tra poco.", 503);
   }
 
   if (response.status === 204) {

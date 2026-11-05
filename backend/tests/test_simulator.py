@@ -17,7 +17,7 @@ from backend.app.services.conversation.interpreter import MessageInterpreter
 from backend.app.simulator.service import SimulatorService
 from backend.app.simulator.store import BookingSummary, ChatMessage, TenantSummary
 from backend.main import app, create_app
-from backend.tests.fakes import FakeBookingStore, ScriptedLLM, make_service, make_tenant
+from backend.tests.fakes import PRODUCTION_ENV, FakeBookingStore, ScriptedLLM, make_service, make_tenant
 
 PHONE = "+390000000001"
 
@@ -153,7 +153,8 @@ def test_phone_is_normalized(make_env: Any) -> None:
 
 
 def test_simulator_not_mounted_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ENVIRONMENT", "production")
+    for key, value in PRODUCTION_ENV.items():
+        monkeypatch.setenv(key, value)
     get_settings.cache_clear()
     try:
         production_app = create_app()
@@ -161,7 +162,7 @@ def test_simulator_not_mounted_in_production(monkeypatch: pytest.MonkeyPatch) ->
         assert not any(p.startswith("/simulator") for p in paths)
         assert TestClient(production_app).get("/simulator").status_code == 404
     finally:
-        monkeypatch.delenv("ENVIRONMENT")
+        monkeypatch.undo()
         get_settings.cache_clear()
 
 
