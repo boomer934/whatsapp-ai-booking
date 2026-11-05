@@ -1,0 +1,37 @@
+# Cartelle delle dipendenze
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Output di build
+.next/
+out/
+dist/
+build/
+*.egg-info/
+
+# File di ambiente e segreti
+.env
+.env.*
+!.env.example
+
+# Log e database
+*.log
+*.sqlite
+*.db
+
+# Cartelle VCS & IDE
+.git/
+.github/
+.vscode/
+.idea/
+
+# File multimediali di grandi dimensioni o asset
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.pdf
