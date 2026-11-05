@@ -250,6 +250,20 @@ class GoogleCalendarService:
         except Exception:
             logger.exception("Creazione evento Google fallita per la prenotazione %s", booking_id)
 
+    async def on_booking_cancelled(self, tenant_id: UUID, google_event_id: str) -> bool:
+        """Rimuove l'evento della prenotazione annullata. Non solleva mai.
+        Restituisce True se l'evento è stato rimosso (o non esisteva più)."""
+        try:
+            credentials = await self._admin_store.get_google_credentials(tenant_id)
+            if credentials is None:
+                return False
+            token = await self._access_token(credentials)
+            await self._client.delete_event(token, credentials.calendar_id, google_event_id)
+            return True
+        except Exception:
+            logger.exception("Rimozione evento Google %s fallita", google_event_id)
+            return False
+
     # ---------------------------------------------------------------- token
 
     async def _access_token(self, credentials: GoogleCredentials) -> str:

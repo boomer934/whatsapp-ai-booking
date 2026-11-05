@@ -9,7 +9,9 @@ from uuid import UUID
 import httpx
 from cryptography.fernet import Fernet
 
+from backend.app.models.enums import BookingStatus
 from backend.app.models.schemas import GoogleCredentials
+from backend.app.repositories.tenant_admin import BookingRef
 from backend.app.services.calendar.google_calendar import GoogleCalendarService
 from backend.app.services.calendar.google_client import (
     CALENDAR_EVENTS_SCOPE,
@@ -30,6 +32,8 @@ class FakeGoogle:
         self.fail_calendar = False
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
         self.events: list[dict[str, Any]] = []
+        self.deleted_events: list[str] = []
+        self.missing_events: set[str] = set()
         self._refresh_count = 0
 
     @property
@@ -53,6 +57,12 @@ class FakeGoogle:
             return httpx.Response(200, json={"email": "salone@example.com"})
         if self.fail_calendar:
             return httpx.Response(503, text="backend error")
+        if request.method == "DELETE" and "/events/" in url:
+            event_id = url.rsplit("/", 1)[1]
+            if event_id in self.missing_events:
+                return httpx.Response(410, text="Resource has been deleted")
+            self.deleted_events.append(event_id)
+            return httpx.Response(204)
         if url.endswith("/freeBusy"):
             cal = body["items"][0]["id"]
             busy = [{"start": s.isoformat(), "end": e.isoformat()} for s, e in self.busy]
@@ -85,6 +95,7 @@ class FakeAdminStore:
     def __init__(self, members: set[tuple[UUID, UUID]] | None = None) -> None:
         self.members = members or set()
         self.credentials: dict[UUID, GoogleCredentials] = {}
+        self.bookings: dict[tuple[UUID, UUID], BookingRef] = {}
 
     async def is_tenant_member(self, tenant_id: UUID, user_id: UUID) -> bool:
         return (tenant_id, user_id) in self.members
@@ -97,6 +108,13 @@ class FakeAdminStore:
 
     async def delete_google_credentials(self, tenant_id: UUID) -> None:
         self.credentials.pop(tenant_id, None)
+
+    async def get_booking(self, tenant_id: UUID, booking_id: UUID) -> BookingRef | None:
+        return self.bookings.get((tenant_id, booking_id))
+
+    async def cancel_booking(self, tenant_id: UUID, booking_id: UUID) -> None:
+        ref = self.bookings[(tenant_id, booking_id)]
+        self.bookings[(tenant_id, booking_id)] = ref.model_copy(update={"status": BookingStatus.CANCELLED})
 
 
 class FakeBookingEvents:

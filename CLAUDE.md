@@ -5,7 +5,7 @@
 Micro-SaaS B2B che automatizza la qualificazione dei lead e la prenotazione degli appuntamenti su WhatsApp per attività commerciali locali (saloni di bellezza, autofficine, studi medici, ecc.). Obiettivo: prenotazione completata in massimo 3-4 scambi di messaggi.
 
 - **Backend:** Python (FastAPI) su Render (piano Free) — blueprint in `render.yaml`.
-- **Frontend:** Next.js + TypeScript + TailwindCSS su Vercel (piano Hobby) — *da realizzare (step 8)*.
+- **Frontend:** Next.js 16 (App Router, Cache Components) + TypeScript strict + Tailwind v4 su Vercel (piano Hobby) — dashboard per i titolari in `frontend/`.
 - **Database e Autenticazione:** Supabase (PostgreSQL) con RLS.
 - **Motore AI / LLM:** Groq `openai/gpt-oss-20b` (primario) con fallback automatico su Gemini `gemini-3.5-flash-lite`. I modelli Llama non sono più disponibili su Groq e `gemini-2.5-flash` non è attivabile per nuovi account: verificare sempre i modelli disponibili prima di cambiarli.
 - **Integrazioni:** WhatsApp Cloud API di Meta (canale scelto: numero di test gratuito, risposte entro 24h gratuite; configurazione in corso) / Twilio (supportato ma a pagamento, non usato), Google Calendar via OAuth per tenant.
@@ -13,7 +13,7 @@ Micro-SaaS B2B che automatizza la qualificazione dei lead e la prenotazione degl
 
 ## 2. Architettura e Principi di Progettazione
 
-- **Multi-tenant:** ogni tabella di dominio ha `tenant_id`; le FK figlie usano la coppia `(id, tenant_id)` così il DB impedisce riferimenti cross-tenant. Il backend usa la chiave service (bypassa la RLS): **ogni query deve filtrare esplicitamente per `tenant_id`**. La dashboard userà la RLS (`is_tenant_member`) e i privilegi di colonna definiti in `0002_rls_policies.sql`.
+- **Multi-tenant:** ogni tabella di dominio ha `tenant_id`; le FK figlie usano la coppia `(id, tenant_id)` così il DB impedisce riferimenti cross-tenant. Il backend usa la chiave service (bypassa la RLS): **ogni query deve filtrare esplicitamente per `tenant_id`**. La dashboard usa la RLS (`is_tenant_member`) e i privilegi di colonna definiti in `0002_rls_policies.sql`.
 - **Vincolo 100% piano gratuito:** nessun costo fisso nell'MVP. Limiti noti: Groq free ≈ 8.000 token/minuto (≈ 6 messaggi/minuto con il prompt attuale); Gemini free ha picchi di errori 503. Il fallback tra i due copre i picchi.
 - **L'LLM interpreta, il codice risponde:** l'LLM restituisce solo JSON strutturato (intent, servizio, data, ora, slot scelto) validato campo per campo in `interpreter.py`. Proposte di orario, conferme e prenotazioni sono testi da template in `state_machine.py`: l'AI non può inventare disponibilità. L'LLM scrive testo libero solo per domande informative e saluti, basandosi sui dati dell'attività.
 - **Risposte brevi e concise:** massimo 1-2 domande per messaggio, niente markdown.
@@ -21,7 +21,8 @@ Micro-SaaS B2B che automatizza la qualificazione dei lead e la prenotazione degl
 - **Webhook:** rispondono subito 200 ed elaborano in `BackgroundTasks` (cold start di Render). Firme verificate (Meta HMAC-SHA256, Twilio HMAC-SHA1); in `development` con segreto vuoto la verifica viene saltata con warning, in `production` la richiesta viene rifiutata. Deduplica tramite unique `(tenant_id, provider_message_id)`.
 - **Disponibilità:** orari di apertura (`business_hours`, 0 = lunedì) meno prenotazioni confermate meno impegni Google Calendar (`CombinedBusyProvider`); slot ogni 30 minuti, preavviso minimo 60 minuti, orizzonte 14 giorni. Lo slot viene ricontrollato subito prima di prenotare. Il vincolo `bookings_no_overlap` protegge dalle doppie prenotazioni concorrenti (un calendario per tenant).
 - **Google Calendar:** OAuth per tenant con scope minimi (`calendar.events` + `calendar.freebusy`). Refresh token cifrato con Fernet (`ENCRYPTION_KEY`) in `google_credentials` (tabella senza policy RLS: solo backend). Lo `state` OAuth è un token Fernet con scadenza 10 minuti che contiene tenant e utente. **Fail-closed**: se il calendario è collegato ma Google non risponde, niente orari proposti e handover all'operatore. La creazione dell'evento dopo la conferma non blocca mai la prenotazione (il DB è la fonte di verità; `google_event_id` salvato sulla prenotazione).
-- **API della dashboard:** `Authorization: Bearer <access token Supabase>` verificato con Supabase Auth (`api/auth.py`), poi `require_tenant_member` controlla `tenant_members`. Endpoint: `GET/DELETE /api/tenants/{id}/google`, `POST /api/tenants/{id}/google/connect`; callback pubblico `GET /oauth/google/callback` che reindirizza a `{FRONTEND_URL}/dashboard/settings?google=connected|error&reason=…`.
+- **API della dashboard:** `Authorization: Bearer <access token Supabase>` verificato con Supabase Auth (`api/auth.py`), poi `require_tenant_member` controlla `tenant_members`. Endpoint: `GET/DELETE /api/tenants/{id}/google`, `POST /api/tenants/{id}/google/connect`, `POST /api/tenants/{id}/bookings/{booking_id}/cancel` (idempotente: annulla e rimuove l'evento Google, che non blocca mai l'annullamento); callback pubblico `GET /oauth/google/callback` che reindirizza a `{FRONTEND_URL}/dashboard/settings?google=connected|error&reason=…`.
+- **Dashboard (frontend):** legge e scrive direttamente su Supabase con la chiave publishable e la sessione dell'utente, quindi è protetta dalla RLS e dai privilegi di colonna (il routing WhatsApp `wa_*`/`messaging_provider` non è modificabile dal titolare). Chiama il backend solo per ciò che richiede segreti (Google Calendar, annullamento con rimozione evento), passando il Bearer token. Ogni pagina e Server Action verifica sessione e membership lato server (`lib/dal.ts`); `src/proxy.ts` (il "middleware" di Next 16) rinnova la sessione e reindirizza al login.
 
 ## 3. Struttura del Progetto
 
@@ -29,7 +30,7 @@ Micro-SaaS B2B che automatizza la qualificazione dei lead e la prenotazione degl
 /
 ├── backend/
 │   ├── app/
-│   │   ├── api/            # router.py, deps.py (composizione dipendenze), auth.py (token Supabase + membership), routes/ (health, webhook_meta, webhook_twilio, google_calendar)
+│   │   ├── api/            # router.py, deps.py (composizione dipendenze), auth.py (token Supabase + membership), routes/ (health, webhook_meta, webhook_twilio, google_calendar, bookings)
 │   │   ├── core/           # config.py (pydantic-settings), db.py (client Supabase async), security.py (firme webhook), crypto.py (Fernet)
 │   │   ├── models/         # enums.py, schemas.py (Pydantic)
 │   │   ├── repositories/   # base.py (Protocol ConversationStore), supabase_store.py, tenant_admin.py (membership + credenziali Google)
@@ -44,7 +45,12 @@ Micro-SaaS B2B che automatizza la qualificazione dei lead e la prenotazione degl
 │   ├── main.py
 │   ├── requirements.txt / requirements-dev.txt
 │   └── .env.example
-├── frontend/               # (step 8) Next.js App Router
+├── frontend/               # Next.js 16 App Router (AGENTS.md: leggere node_modules/next/dist/docs prima di scrivere codice)
+│   └── src/
+│       ├── proxy.ts        # rinnovo sessione Supabase + protezione rotte
+│       ├── app/            # login/, auth/callback/, onboarding/, dashboard/{page, services, hours, conversations, bookings, settings}
+│       ├── components/     # ui.tsx (Card, Badge, …), form-controls.tsx (SubmitButton, FormMessage, useFormAction)
+│       └── lib/            # supabase/{server,proxy}.ts, dal.ts (sessione + attività corrente), backend.ts (fetch con Bearer), database.types.ts
 ├── supabase/
 │   ├── migrations/         # 0001_init_schema.sql, 0002_rls_policies.sql
 │   └── seed.sql            # tenant demo collegato al Twilio Sandbox (+14155238886)
@@ -78,9 +84,13 @@ Tutti i comandi si lanciano dalla radice del repository (gli import sono `backen
 2. Avviare il backend con `PUBLIC_BASE_URL=<url del tunnel>` (necessario per la verifica firma Twilio dietro proxy).
 3. Console Twilio > Messaging > Try it out > WhatsApp sandbox settings: "When a message comes in" = `<url del tunnel>/webhooks/twilio` (POST).
 
-**Frontend (Next.js / TypeScript)** — dallo step 8
+**Frontend (Next.js / TypeScript)**
 
-- `cd frontend && npm install`, `npm run dev`, `npm run build`
+- `cd frontend && npm install`, poi `npm run dev` (oppure `npm run build && npx next start`).
+- Controlli: `npx tsc --noEmit`, `npx eslint src`, `npm run build`.
+- In locale la porta 3000 è occupata da Docker Desktop: usare `-p 3001` (`npx next dev -p 3001`). Per OAuth Google dalla dashboard locale impostare `FRONTEND_URL=http://localhost:3001` in `backend/.env`.
+- Test E2E: script Playwright (Python, nel venv) che crea un utente/attività di test via API admin, percorre tutte le pagine (anche una conversazione reale dal simulatore e i controlli RLS) e poi cancella tutto. Con Cache Components le pagine già visitate restano nel DOM nascoste (`<Activity>`): nei locator usare `:visible` o `get_by_role`, mai selettori generici come `li` o `main`.
+- Next 16: `cookies()`, `searchParams` e l'ora corrente vanno letti dentro `<Suspense>`; dopo una mutazione usare `refresh()` di `next/cache`; `error.tsx` riceve `retry`. Non affidare messaggi una tantum a query string dopo un `redirect()` da Server Action (il router può riusare i dati prefetchati senza parametri): ricavarli dallo stato.
 
 ## 5. Configurazione (`backend/.env`, mai committato)
 
@@ -90,6 +100,7 @@ Tutti i comandi si lanciano dalla radice del repository (gli import sono `backen
 - `ENCRYPTION_KEY` (Fernet) è obbligatoria per Google Calendar: usare la stessa chiave in tutti gli ambienti che condividono il DB, altrimenti i calendari collegati vanno ricollegati.
 - Google OAuth: client "Applicazione web" in Google Cloud Console con Calendar API abilitata; `GOOGLE_REDIRECT_URI` deve coincidere esattamente con un redirect autorizzato. Con la schermata di consenso in modalità "Test" servono gli utenti di test; la pubblicazione richiede la verifica Google (scope sensibili).
 - `GROQ_REASONING_EFFORT` (per gpt-oss) e `GEMINI_THINKING_LEVEL` (per Gemini 3, `minimal` = più veloce) riducono la latenza.
+- Frontend: copiare `frontend/.env.example` in `frontend/.env.local` (mai committato): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (chiave `sb_publishable_...`, pubblica per natura) e `API_URL` (backend, letto solo lato server).
 - Python locale 3.14 / Render 3.12: mantenere il codice compatibile con 3.12. `tzdata` è richiesto su Windows per `zoneinfo`.
 
 ## 6. Standard di Codifica e Linee Guida
@@ -106,7 +117,7 @@ Tutti i comandi si lanciano dalla radice del repository (gli import sono `backen
 - [x] Step 4: webhook Meta/Twilio con verifica firma e deduplica
 - [x] Step 5-6: interpretazione AI, macchina a stati, disponibilità, handover — verificati con LLM e DB reali
 - [x] Step 7: Google Calendar (OAuth per tenant, free/busy, evento alla conferma) — verificato con account Google reale: collegamento dal simulatore, lettura free/busy ed evento creato alla prenotazione. Client OAuth di sviluppo in modalità "Test" (redirect `http://localhost:8000/oauth/google/callback`); in produzione servirà un redirect URI del backend su Render e la verifica dell'app Google.
-- [ ] Step 8: dashboard Next.js (servizi, orari, toggle AI, chat in manuale, prenotazioni)
+- [x] Step 8: dashboard Next.js (login/registrazione, onboarding, panoramica con checklist, servizi, orari con più fasce, toggle AI, conversazioni con "Riprendi AI", prenotazioni con annullamento, impostazioni e collegamento Google) — verificata end-to-end con Playwright (41/41 controlli, inclusi RLS e privilegi di colonna)
 - [ ] Step 9: deploy Render + Vercel e webhook definitivi (token Meta permanente di "utente di sistema", redirect URI Google di produzione)
 - [x] Simulatore WhatsApp locale per test end-to-end senza provider (verificato con AI e DB reali)
 - Da fare prima della produzione: template WhatsApp approvato per le notifiche all'operatore (finestra di 24h di Meta); gestione disdette/spostamenti (oggi vanno all'operatore); **soggetto giuridico verificabile (es. partita IVA) per la verifica business Meta e l'App Review necessarie all'onboarding dei clienti (Embedded Signup)**; test WhatsApp reale con numero di test Meta.

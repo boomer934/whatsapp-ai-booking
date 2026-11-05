@@ -125,3 +125,62 @@ def test_connect_returns_503_when_google_not_configured(env: Env) -> None:
     )
     response = env.client.post(f"/api/tenants/{TENANT_A}/google/connect", headers=GOOD)
     assert response.status_code == 503
+
+
+# ------------------------------------------------------- annullamento prenotazioni
+
+
+def connect(env: Env) -> None:
+    state = parse_qs(urlparse(connect_url(env)).query)["state"][0]
+    env.client.get("/oauth/google/callback", params={"code": "auth-code", "state": state})
+
+
+def add_booking(env: Env, event_id: str | None = "evt-42") -> UUID:
+    from backend.app.models.enums import BookingStatus
+    from backend.app.repositories.tenant_admin import BookingRef
+
+    booking_id = uuid4()
+    env.admin.bookings[(TENANT_A, booking_id)] = BookingRef(
+        id=booking_id, status=BookingStatus.CONFIRMED, google_event_id=event_id
+    )
+    return booking_id
+
+
+def test_cancel_booking_removes_google_event(env: Env) -> None:
+    connect(env)
+    booking_id = add_booking(env)
+    response = env.client.post(f"/api/tenants/{TENANT_A}/bookings/{booking_id}/cancel", headers=GOOD)
+    assert response.status_code == 200
+    assert response.json() == {"status": "cancelled", "google_event_removed": True}
+    assert env.admin.bookings[(TENANT_A, booking_id)].status == "cancelled"
+    assert env.google.deleted_events == ["evt-42"]
+
+
+def test_cancel_booking_event_already_deleted_on_google(env: Env) -> None:
+    connect(env)
+    env.google.missing_events.add("evt-42")
+    booking_id = add_booking(env)
+    response = env.client.post(f"/api/tenants/{TENANT_A}/bookings/{booking_id}/cancel", headers=GOOD)
+    assert response.json() == {"status": "cancelled", "google_event_removed": True}
+
+
+def test_cancel_booking_without_calendar_or_event(env: Env) -> None:
+    booking_id = add_booking(env, event_id=None)
+    response = env.client.post(f"/api/tenants/{TENANT_A}/bookings/{booking_id}/cancel", headers=GOOD)
+    assert response.json() == {"status": "cancelled", "google_event_removed": False}
+
+
+def test_cancel_booking_google_down_still_cancels(env: Env) -> None:
+    connect(env)
+    env.google.fail_calendar = True
+    booking_id = add_booking(env)
+    response = env.client.post(f"/api/tenants/{TENANT_A}/bookings/{booking_id}/cancel", headers=GOOD)
+    assert response.json() == {"status": "cancelled", "google_event_removed": False}
+    assert env.admin.bookings[(TENANT_A, booking_id)].status == "cancelled"
+
+
+def test_cancel_booking_authorization(env: Env) -> None:
+    booking_id = add_booking(env)
+    assert env.client.post(f"/api/tenants/{TENANT_A}/bookings/{booking_id}/cancel").status_code == 401
+    assert env.client.post(f"/api/tenants/{TENANT_B}/bookings/{booking_id}/cancel", headers=GOOD).status_code == 403
+    assert env.client.post(f"/api/tenants/{TENANT_A}/bookings/{uuid4()}/cancel", headers=GOOD).status_code == 404

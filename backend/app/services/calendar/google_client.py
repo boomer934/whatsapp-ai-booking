@@ -154,6 +154,19 @@ class GoogleCalendarClient:
             raise GoogleApiError("Risposta di creazione evento senza id.")
         return event_id
 
+    async def delete_event(self, access_token: str, calendar_id: str, event_id: str) -> None:
+        """Elimina un evento. Un evento già eliminato (404/410) non è un errore."""
+        url = (
+            f"{CALENDAR_API}/calendars/{quote(calendar_id, safe='')}"
+            f"/events/{quote(event_id, safe='')}"
+        )
+        try:
+            await self._request("DELETE", url, access_token=access_token)
+        except GoogleApiError as exc:
+            if " 404:" in str(exc) or " 410:" in str(exc):
+                return
+            raise
+
     async def revoke(self, token: str) -> None:
         await self._request("POST", REVOKE_URL, data={"token": token})
 
