@@ -1,16 +1,23 @@
 import asyncio
 
 from backend.app.models.enums import ConversationMode, MessagingProviderName
-from backend.app.services.conversation.engine import PlaceholderReplyEngine
+from backend.app.models.schemas import Conversation, InboundMessage, Tenant
 from backend.app.services.conversation.inbound import InboundProcessor
 from backend.tests.fakes import FakeSender, FakeStore, make_message, make_tenant
+
+
+class EchoEngine:
+    async def reply(
+        self, tenant: Tenant, conversation: Conversation, message: InboundMessage
+    ) -> str | None:
+        return f"eco: {message.text}"
 
 
 def build(store: FakeStore) -> tuple[InboundProcessor, FakeSender]:
     sender = FakeSender()
     processor = InboundProcessor(
         store=store,
-        engine=PlaceholderReplyEngine(),
+        engine=EchoEngine(),
         senders={MessagingProviderName.META: sender, MessagingProviderName.TWILIO: sender},
     )
     return processor, sender

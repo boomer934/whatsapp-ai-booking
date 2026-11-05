@@ -3,11 +3,18 @@
 Separata dall'implementazione Supabase per poterla sostituire nei test.
 """
 
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
 from backend.app.models.enums import MessagingProviderName
-from backend.app.models.schemas import Conversation, InboundMessage, Tenant
+from backend.app.models.schemas import (
+    BusinessHours,
+    Conversation,
+    InboundMessage,
+    Service,
+    Tenant,
+)
 
 
 class ConversationStore(Protocol):
@@ -33,4 +40,30 @@ class ConversationStore(Protocol):
         self, conversation: Conversation, body: str, provider_message_id: str | None
     ) -> None:
         """Salva una risposta inviata al cliente."""
+        ...
+
+    async def update_conversation(self, conversation: Conversation) -> None:
+        """Persiste state, mode, failed_attempts, context e customer_name."""
+        ...
+
+    async def list_active_services(self, tenant_id: UUID) -> list[Service]:
+        """Servizi prenotabili, in ordine stabile (la numerazione nel prompt dipende da questo)."""
+        ...
+
+    async def list_business_hours(self, tenant_id: UUID) -> list[BusinessHours]: ...
+
+    async def list_busy_intervals(
+        self, tenant_id: UUID, start: datetime, end: datetime
+    ) -> list[tuple[datetime, datetime]]:
+        """Prenotazioni confermate che intersecano [start, end)."""
+        ...
+
+    async def create_booking(
+        self,
+        conversation: Conversation,
+        service: Service,
+        starts_at: datetime,
+        ends_at: datetime,
+    ) -> UUID | None:
+        """Crea la prenotazione. None se lo slot è già occupato (vincolo anti-overlap)."""
         ...

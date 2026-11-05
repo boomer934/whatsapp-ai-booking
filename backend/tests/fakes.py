@@ -1,6 +1,7 @@
-"""Implementazioni in memoria di store e sender per i test."""
+"""Implementazioni in memoria di store, sender, LLM e notifiche per i test."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
+from typing import Any
 from uuid import UUID, uuid4
 
 from backend.app.models.enums import (
@@ -8,8 +9,34 @@ from backend.app.models.enums import (
     ConversationState,
     MessagingProviderName,
 )
-from backend.app.models.schemas import Conversation, InboundMessage, Tenant
+from backend.app.models.schemas import (
+    BusinessHours,
+    Conversation,
+    InboundMessage,
+    Service,
+    Tenant,
+)
+from backend.app.services.llm.base import LLMError
 from backend.app.services.messaging.base import MessagingClient
+
+
+def make_service(tenant_id: UUID, name: str, minutes: int, price_cents: int | None) -> Service:
+    return Service(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        name=name,
+        duration_minutes=minutes,
+        price_cents=price_cents,
+    )
+
+
+def weekly_hours() -> list[BusinessHours]:
+    """Mar-Sab 09:00-13:00 e 14:30-19:00 (come il seed)."""
+    return [
+        BusinessHours(weekday=d, open_time=o, close_time=c)
+        for d in range(1, 6)
+        for o, c in ((time(9, 0), time(13, 0)), (time(14, 30), time(19, 0)))
+    ]
 
 
 def make_tenant(**overrides: object) -> Tenant:
@@ -99,3 +126,77 @@ class FakeSender(MessagingClient):
     async def send_text(self, tenant: Tenant, to_phone: str, body: str) -> str | None:
         self.sent.append((tenant.id, to_phone, body))
         return f"sent-{len(self.sent)}"
+
+
+class FakeBookingStore(FakeStore):
+    """FakeStore con catalogo, orari e prenotazioni (per il motore AI)."""
+
+    def __init__(
+        self,
+        tenants: list[Tenant],
+        services: list[Service] | None = None,
+        hours: list[BusinessHours] | None = None,
+    ) -> None:
+        super().__init__(tenants)
+        self.services = services or []
+        self.hours = hours if hours is not None else weekly_hours()
+        self.bookings: list[tuple[UUID, datetime, datetime]] = []
+        self.updates = 0
+
+    async def update_conversation(self, conversation: Conversation) -> None:
+        self.updates += 1
+        self.conversations[(conversation.tenant_id, conversation.customer_phone)] = conversation
+
+    async def list_active_services(self, tenant_id: UUID) -> list[Service]:
+        return [s for s in self.services if s.tenant_id == tenant_id and s.is_active]
+
+    async def list_business_hours(self, tenant_id: UUID) -> list[BusinessHours]:
+        return self.hours
+
+    async def list_busy_intervals(
+        self, tenant_id: UUID, start: datetime, end: datetime
+    ) -> list[tuple[datetime, datetime]]:
+        return [(s, e) for _, s, e in self.bookings if s < end and start < e]
+
+    async def create_booking(
+        self,
+        conversation: Conversation,
+        service: Service,
+        starts_at: datetime,
+        ends_at: datetime,
+    ) -> UUID | None:
+        if any(s < ends_at and starts_at < e for _, s, e in self.bookings):
+            return None
+        self.bookings.append((service.id, starts_at, ends_at))
+        return uuid4()
+
+
+class ScriptedLLM:
+    """LLM finto: restituisce in ordine le risposte preparate (dict o eccezione)."""
+
+    name = "scripted"
+
+    def __init__(self, *responses: dict[str, Any] | LLMError) -> None:
+        self.responses = list(responses)
+        self.prompts: list[tuple[str, str]] = []
+
+    async def complete_json(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
+        self.prompts.append((system_prompt, user_prompt))
+        response = self.responses.pop(0)
+        if isinstance(response, LLMError):
+            raise response
+        return response
+
+
+class RecordingNotifier:
+    def __init__(self) -> None:
+        self.calls: list[tuple[UUID, str]] = []
+
+    async def notify_handover(
+        self,
+        tenant: Tenant,
+        conversation: Conversation,
+        last_message: str | None,
+        reason: str,
+    ) -> None:
+        self.calls.append((conversation.id, reason))

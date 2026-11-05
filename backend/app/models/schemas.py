@@ -1,6 +1,6 @@
 """Modelli Pydantic di dominio condivisi tra API, servizi e repository."""
 
-from datetime import datetime
+from datetime import datetime, time
 from typing import Any
 from uuid import UUID
 
@@ -38,6 +38,23 @@ class Tenant(BaseModel):
     wa_phone_number_id: str | None = None
     wa_phone_e164: str | None = None
     operator_phone: str | None = None
+
+
+class Service(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    name: str
+    duration_minutes: int
+    price_cents: int | None = None
+    is_active: bool = True
+
+
+class BusinessHours(BaseModel):
+    """Fascia di apertura. weekday: 0 = lunedì ... 6 = domenica."""
+
+    weekday: int = Field(ge=0, le=6)
+    open_time: time
+    close_time: time
 
 
 class Conversation(BaseModel):

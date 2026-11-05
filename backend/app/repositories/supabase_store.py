@@ -4,12 +4,29 @@ Usa la service role key: ogni query filtra esplicitamente per tenant_id.
 """
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
+from postgrest.exceptions import APIError
+
 from backend.app.core.db import get_supabase
-from backend.app.models.enums import MessageDirection, MessagingProviderName
-from backend.app.models.schemas import Conversation, InboundMessage, Tenant
+from backend.app.models.enums import BookingStatus, MessageDirection, MessagingProviderName
+from backend.app.models.schemas import (
+    BusinessHours,
+    Conversation,
+    InboundMessage,
+    Service,
+    Tenant,
+)
+
+# SQLSTATE di violazione del vincolo di esclusione bookings_no_overlap.
+EXCLUSION_VIOLATION = "23P01"
+_SERVICE_COLUMNS = "id, tenant_id, name, duration_minutes, price_cents, is_active"
+
+
+def _rows(data: Any) -> list[dict[str, Any]]:
+    """Le risposte PostgREST sono tipizzate come JSON generico: qui diventano righe."""
+    return cast(list[dict[str, Any]], data)
 
 _TENANT_COLUMNS = (
     "id, name, timezone, ai_enabled, messaging_provider, "
@@ -36,7 +53,7 @@ class SupabaseConversationStore:
             .limit(1)
             .execute()
         )
-        rows: list[dict[str, Any]] = response.data
+        rows = _rows(response.data)
         return Tenant.model_validate(rows[0]) if rows else None
 
     async def get_or_create_conversation(
@@ -127,3 +144,92 @@ class SupabaseConversationStore:
             .eq("tenant_id", str(conversation.tenant_id))
             .execute()
         )
+
+    async def update_conversation(self, conversation: Conversation) -> None:
+        db = await get_supabase()
+        await (
+            db.table("conversations")
+            .update(
+                {
+                    "state": conversation.state.value,
+                    "mode": conversation.mode.value,
+                    "failed_attempts": conversation.failed_attempts,
+                    "context": conversation.context,
+                    "customer_name": conversation.customer_name,
+                }
+            )
+            .eq("id", str(conversation.id))
+            .eq("tenant_id", str(conversation.tenant_id))
+            .execute()
+        )
+
+    async def list_active_services(self, tenant_id: UUID) -> list[Service]:
+        db = await get_supabase()
+        response = (
+            await db.table("services")
+            .select(_SERVICE_COLUMNS)
+            .eq("tenant_id", str(tenant_id))
+            .eq("is_active", True)
+            .order("name")
+            .order("id")
+            .execute()
+        )
+        return [Service.model_validate(row) for row in response.data]
+
+    async def list_business_hours(self, tenant_id: UUID) -> list[BusinessHours]:
+        db = await get_supabase()
+        response = (
+            await db.table("business_hours")
+            .select("weekday, open_time, close_time")
+            .eq("tenant_id", str(tenant_id))
+            .execute()
+        )
+        return [BusinessHours.model_validate(row) for row in response.data]
+
+    async def list_busy_intervals(
+        self, tenant_id: UUID, start: datetime, end: datetime
+    ) -> list[tuple[datetime, datetime]]:
+        db = await get_supabase()
+        response = (
+            await db.table("bookings")
+            .select("starts_at, ends_at")
+            .eq("tenant_id", str(tenant_id))
+            .eq("status", BookingStatus.CONFIRMED.value)
+            .lt("starts_at", end.isoformat())
+            .gt("ends_at", start.isoformat())
+            .execute()
+        )
+        return [
+            (datetime.fromisoformat(row["starts_at"]), datetime.fromisoformat(row["ends_at"]))
+            for row in _rows(response.data)
+        ]
+
+    async def create_booking(
+        self,
+        conversation: Conversation,
+        service: Service,
+        starts_at: datetime,
+        ends_at: datetime,
+    ) -> UUID | None:
+        db = await get_supabase()
+        try:
+            response = (
+                await db.table("bookings")
+                .insert(
+                    {
+                        "tenant_id": str(conversation.tenant_id),
+                        "conversation_id": str(conversation.id),
+                        "service_id": str(service.id),
+                        "customer_phone": conversation.customer_phone,
+                        "customer_name": conversation.customer_name,
+                        "starts_at": starts_at.isoformat(),
+                        "ends_at": ends_at.isoformat(),
+                    }
+                )
+                .execute()
+            )
+        except APIError as exc:
+            if exc.code == EXCLUSION_VIOLATION:
+                return None
+            raise
+        return UUID(str(_rows(response.data)[0]["id"]))

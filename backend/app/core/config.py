@@ -41,12 +41,15 @@ class Settings(BaseSettings):
     twilio_account_sid: str = ""
     twilio_auth_token: SecretStr = SecretStr("")
 
-    # LLM
+    # LLM (il provider non primario, se ha una chiave, fa da fallback)
     llm_provider: Literal["groq", "gemini"] = "groq"
+    llm_timeout_seconds: float = 15.0
     groq_api_key: SecretStr = SecretStr("")
-    groq_model: str = "llama-3.1-8b-instant"
+    groq_model: str = "openai/gpt-oss-20b"
+    groq_reasoning_effort: str = "low"
     gemini_api_key: SecretStr = SecretStr("")
-    gemini_model: str = "gemini-1.5-flash"
+    gemini_model: str = "gemini-3.5-flash-lite"
+    gemini_thinking_level: str = "minimal"
 
     # Google Calendar OAuth
     google_client_id: str = ""
