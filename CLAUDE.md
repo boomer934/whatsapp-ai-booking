@@ -10,6 +10,7 @@ Micro-SaaS B2B che automatizza la qualificazione dei lead e la prenotazione degl
 - **Motore AI / LLM:** Groq `openai/gpt-oss-20b` (primario) con fallback automatico su Gemini `gemini-3.5-flash-lite`. I modelli Llama non sono più disponibili su Groq e `gemini-2.5-flash` non è attivabile per nuovi account: verificare sempre i modelli disponibili prima di cambiarli.
 - **Integrazioni:** WhatsApp Cloud API di Meta (canale scelto: numero di test gratuito, risposte entro 24h gratuite; configurazione in corso) / Twilio (supportato ma a pagamento, non usato), Google Calendar via OAuth per tenant.
 - **Repository:** https://github.com/boomer934/whatsapp-ai-booking (privato, branch `main`).
+- **Produzione:** backend https://whatsapp-ai-booking-syjn.onrender.com (Render, Web Service Free, deploy automatico da `main`), dashboard https://whatsapp-ai-booking.vercel.app (Vercel Hobby, Root Directory `frontend`, deploy automatico da `main`). Stesso progetto Supabase dell'ambiente locale.
 
 ## 2. Architettura e Principi di Progettazione
 
@@ -84,6 +85,12 @@ Tutti i comandi si lanciano dalla radice del repository (gli import sono `backen
 2. Avviare il backend con `PUBLIC_BASE_URL=<url del tunnel>` (necessario per la verifica firma Twilio dietro proxy).
 3. Console Twilio > Messaging > Try it out > WhatsApp sandbox settings: "When a message comes in" = `<url del tunnel>/webhooks/twilio` (POST).
 
+**Deploy**
+
+- Render: Web Service dal repo, build `pip install -r requirements.txt` (il `requirements.txt` in radice include `backend/requirements.txt`; Python fissato da `.python-version`), start `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`, health check `/health`. Variabili come `backend/.env` ma con `ENVIRONMENT=production`, `SIMULATOR_ENABLED=false`, `PUBLIC_BASE_URL`/`GOOGLE_REDIRECT_URI` sull'URL Render e `FRONTEND_URL` sull'URL Vercel. Il piano Free si sospende dopo 15 minuti (risveglio ~50 s).
+- Vercel: Root Directory `frontend`, variabili `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `API_URL` (URL Render).
+- Il test E2E si può puntare alla produzione con `FRONT_URL=https://whatsapp-ai-booking.vercel.app` (le conversazioni passano comunque dal simulatore locale, che scrive sullo stesso DB).
+
 **Frontend (Next.js / TypeScript)**
 
 - `cd frontend && npm install`, poi `npm run dev` (oppure `npm run build && npx next start`).
@@ -118,6 +125,7 @@ Tutti i comandi si lanciano dalla radice del repository (gli import sono `backen
 - [x] Step 5-6: interpretazione AI, macchina a stati, disponibilità, handover — verificati con LLM e DB reali
 - [x] Step 7: Google Calendar (OAuth per tenant, free/busy, evento alla conferma) — verificato con account Google reale: collegamento dal simulatore, lettura free/busy ed evento creato alla prenotazione. Client OAuth di sviluppo in modalità "Test" (redirect `http://localhost:8000/oauth/google/callback`); in produzione servirà un redirect URI del backend su Render e la verifica dell'app Google.
 - [x] Step 8: dashboard Next.js (login/registrazione, onboarding, panoramica con checklist, servizi, orari con più fasce, toggle AI, conversazioni con "Riprendi AI", prenotazioni con annullamento, impostazioni e collegamento Google) — verificata end-to-end con Playwright (41/41 controlli, inclusi RLS e privilegi di colonna)
-- [ ] Step 9: deploy Render + Vercel e webhook definitivi (token Meta permanente di "utente di sistema", redirect URI Google di produzione)
+- [x] Step 9: deploy Render + Vercel — verificato con il test E2E Playwright contro la produzione (41/41). In produzione: `ENVIRONMENT=production`, `SIMULATOR_ENABLED=false`, `/docs` e `/openapi.json` disattivati, webhook senza firma rifiutati; redirect URI Google di produzione aggiunto al client OAuth. L'app rifiuta di avviarsi in production se la configurazione è incompleta (`Settings.production_problems()`, motivo nei log di Render).
+- [ ] Webhook WhatsApp definitivi: `https://whatsapp-ai-booking-syjn.onrender.com/webhooks/meta` con `META_*` impostati su Render (token permanente di "utente di sistema") quando l'account Meta sarà disponibile.
 - [x] Simulatore WhatsApp locale per test end-to-end senza provider (verificato con AI e DB reali)
 - Da fare prima della produzione: template WhatsApp approvato per le notifiche all'operatore (finestra di 24h di Meta); gestione disdette/spostamenti (oggi vanno all'operatore); **soggetto giuridico verificabile (es. partita IVA) per la verifica business Meta e l'App Review necessarie all'onboarding dei clienti (Embedded Signup)**; test WhatsApp reale con numero di test Meta.
