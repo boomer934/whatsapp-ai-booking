@@ -35,6 +35,7 @@ def get_google_calendar_service() -> GoogleCalendarService:
         admin_store=get_admin_store(),
         booking_store=get_conversation_store(),
         encryption_key=settings.encryption_key.get_secret_value(),
+        allow_dev_flow=settings.simulator_active,
     )
 
 

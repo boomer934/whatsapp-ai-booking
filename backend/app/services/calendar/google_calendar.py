@@ -10,7 +10,7 @@ import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Protocol
+from typing import Literal, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -43,6 +43,15 @@ class OAuthFlowError(RuntimeError):
         self.code = code
 
 
+# Dove riportare l'utente dopo il consenso Google.
+ReturnTarget = Literal["dashboard", "simulator"]
+
+
+class AuthorizationResult(BaseModel):
+    tenant_id: UUID
+    return_to: ReturnTarget
+
+
 class GoogleConnectionStatus(BaseModel):
     connected: bool
     google_account_email: str | None = None
@@ -70,9 +79,12 @@ class GoogleCalendarService:
         admin_store: TenantAdminStore,
         booking_store: BookingEventStore,
         encryption_key: str,
+        allow_dev_flow: bool = False,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._client = client
+        # Collegamento dal simulatore locale senza utente autenticato: solo sviluppo.
+        self._allow_dev_flow = allow_dev_flow
         self._admin_store = admin_store
         self._booking_store = booking_store
         self._encryption_key = encryption_key
@@ -88,23 +100,50 @@ class GoogleCalendarService:
             raise GoogleNotConfiguredError(str(exc)) from exc
 
     def authorization_url(self, tenant_id: UUID, user_id: UUID) -> str:
+        """URL di consenso per un membro autenticato del tenant (dashboard)."""
+        return self._build_authorization_url(
+            {"t": str(tenant_id), "u": str(user_id), "r": "dashboard"}
+        )
+
+    def dev_authorization_url(self, tenant_id: UUID) -> str:
+        """URL di consenso dal simulatore locale (nessun utente: solo sviluppo)."""
+        if not self._allow_dev_flow:
+            raise OAuthFlowError("dev_disabled", "Collegamento di sviluppo non consentito.")
+        return self._build_authorization_url({"t": str(tenant_id), "dev": True, "r": "simulator"})
+
+    def _build_authorization_url(self, payload: dict[str, object]) -> str:
         if not self._client.is_configured:
             raise GoogleNotConfiguredError("GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET mancanti.")
-        state = self._cipher().encrypt_json(
-            {"t": str(tenant_id), "u": str(user_id), "n": secrets.token_urlsafe(8)}
-        )
+        state = self._cipher().encrypt_json({**payload, "n": secrets.token_urlsafe(8)})
         return self._client.authorization_url(state)
 
-    async def complete_authorization(self, code: str, state: str) -> UUID:
-        """Gestisce il callback OAuth e restituisce il tenant collegato."""
+    def return_target(self, state: str | None) -> ReturnTarget:
+        """Dove tornare dopo il callback (anche in caso di errore o consenso negato)."""
+        if not state:
+            return "dashboard"
+        try:
+            payload = self._cipher().decrypt_json(state)
+        except (InvalidEncryptedValue, GoogleNotConfiguredError, ValueError):
+            return "dashboard"
+        if payload.get("r") == "simulator" and self._allow_dev_flow:
+            return "simulator"
+        return "dashboard"
+
+    async def complete_authorization(self, code: str, state: str) -> AuthorizationResult:
+        """Gestisce il callback OAuth e salva il collegamento del tenant."""
         cipher = self._cipher()
         try:
             payload = cipher.decrypt_json(state, ttl_seconds=OAUTH_STATE_TTL_SECONDS)
-            tenant_id, user_id = UUID(payload["t"]), UUID(payload["u"])
+            tenant_id = UUID(payload["t"])
+            dev_flow = payload.get("dev") is True
+            user_id = None if dev_flow else UUID(payload["u"])
         except (InvalidEncryptedValue, KeyError, ValueError) as exc:
             raise OAuthFlowError("invalid_state", "Richiesta scaduta o non valida.") from exc
 
-        if not await self._admin_store.is_tenant_member(tenant_id, user_id):
+        if dev_flow:
+            if not self._allow_dev_flow:
+                raise OAuthFlowError("invalid_state", "Collegamento di sviluppo non consentito.")
+        elif user_id is None or not await self._admin_store.is_tenant_member(tenant_id, user_id):
             raise OAuthFlowError("forbidden", "Utente non autorizzato per questa attività.")
 
         try:
@@ -134,7 +173,9 @@ class GoogleCalendarService:
         )
         self._cache_token(tenant_id, tokens.access_token, tokens.expires_in)
         logger.info("Google Calendar collegato per il tenant %s", tenant_id)
-        return tenant_id
+        return AuthorizationResult(
+            tenant_id=tenant_id, return_to="simulator" if dev_flow else "dashboard"
+        )
 
     async def status(self, tenant_id: UUID) -> GoogleConnectionStatus:
         credentials = await self._admin_store.get_google_credentials(tenant_id)

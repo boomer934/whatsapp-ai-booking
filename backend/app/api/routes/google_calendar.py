@@ -29,6 +29,7 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 # Pagina della dashboard a cui tornare dopo il consenso Google.
 DASHBOARD_RETURN_PATH = "/dashboard/settings"
+SIMULATOR_RETURN_PATH = "/simulator"
 
 
 class AuthorizationUrlResponse(BaseModel):
@@ -74,18 +75,22 @@ async def google_callback(
     error: Annotated[str | None, Query()] = None,
 ) -> RedirectResponse:
     """Callback pubblico di Google: l'identità è garantita dallo `state` cifrato."""
+    target = calendar.return_target(state)
 
-    def back_to_dashboard(**params: str) -> RedirectResponse:
-        base = settings.frontend_url.rstrip("/") + DASHBOARD_RETURN_PATH
+    def back(**params: str) -> RedirectResponse:
+        if target == "simulator":
+            base = SIMULATOR_RETURN_PATH  # stesso backend: percorso relativo
+        else:
+            base = settings.frontend_url.rstrip("/") + DASHBOARD_RETURN_PATH
         return RedirectResponse(f"{base}?{urlencode(params)}", status_code=status.HTTP_302_FOUND)
 
     if error or not code or not state:
-        return back_to_dashboard(google="error", reason=error or "missing_code")
+        return back(google="error", reason=error or "missing_code")
     try:
         await calendar.complete_authorization(code, state)
     except OAuthFlowError as exc:
         logger.warning("Collegamento Google fallito (%s): %s", exc.code, exc)
-        return back_to_dashboard(google="error", reason=exc.code)
+        return back(google="error", reason=exc.code)
     except GoogleNotConfiguredError:
-        return back_to_dashboard(google="error", reason="not_configured")
-    return back_to_dashboard(google="connected")
+        return back(google="error", reason="not_configured")
+    return back(google="connected")

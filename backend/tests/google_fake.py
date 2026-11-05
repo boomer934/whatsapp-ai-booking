@@ -116,6 +116,7 @@ def build_service(
     *,
     client_id: str = "client-id",
     encryption_key: str = TEST_KEY,
+    allow_dev_flow: bool = False,
 ) -> GoogleCalendarService:
     client = GoogleCalendarClient(
         client_id=client_id,
@@ -128,4 +129,5 @@ def build_service(
         admin_store=admin,
         booking_store=events or FakeBookingEvents(),
         encryption_key=encryption_key,
+        allow_dev_flow=allow_dev_flow,
     )

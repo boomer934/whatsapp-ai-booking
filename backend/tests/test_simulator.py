@@ -163,3 +163,51 @@ def test_simulator_not_mounted_in_production(monkeypatch: pytest.MonkeyPatch) ->
     finally:
         monkeypatch.delenv("ENVIRONMENT")
         get_settings.cache_clear()
+
+
+# ---------------------------------------------------------- Google Calendar
+
+
+def test_google_connect_from_simulator_full_flow(make_env: Any) -> None:
+    from urllib.parse import parse_qs, urlparse
+
+    from backend.app.api.deps import get_google_calendar_service
+    from backend.tests.google_fake import FakeAdminStore, FakeGoogle, build_service
+
+    env = make_env()
+    admin = FakeAdminStore()
+    calendar = build_service(FakeGoogle(), admin, allow_dev_flow=True)
+    app.dependency_overrides[get_google_calendar_service] = lambda: calendar
+    tenant = str(env.tenant.id)
+
+    assert env.client.get("/simulator/api/google", params={"tenant_id": tenant}).json()["connected"] is False
+    url = env.client.post("/simulator/api/google/connect", json={"tenant_id": tenant}).json()["authorization_url"]
+    state = parse_qs(urlparse(url).query)["state"][0]
+
+    callback = env.client.get(
+        "/oauth/google/callback", params={"code": "auth-code", "state": state}, follow_redirects=False
+    )
+    assert callback.status_code == 302
+    assert callback.headers["location"] == "/simulator?google=connected"
+    assert env.client.get("/simulator/api/google", params={"tenant_id": tenant}).json()["connected"] is True
+
+    denied = env.client.get(
+        "/oauth/google/callback", params={"error": "access_denied", "state": state}, follow_redirects=False
+    )
+    assert denied.headers["location"] == "/simulator?google=error&reason=access_denied"
+
+    assert env.client.post("/simulator/api/google/disconnect", json={"tenant_id": tenant}).status_code == 204
+    assert admin.credentials == {}
+
+
+def test_google_connect_requires_configuration(make_env: Any) -> None:
+    from backend.app.api.deps import get_google_calendar_service
+    from backend.tests.google_fake import FakeAdminStore, FakeGoogle, build_service
+
+    env = make_env()
+    app.dependency_overrides[get_google_calendar_service] = lambda: build_service(
+        FakeGoogle(), FakeAdminStore(), client_id="", allow_dev_flow=True
+    )
+    response = env.client.post("/simulator/api/google/connect", json={"tenant_id": str(env.tenant.id)})
+    assert response.status_code == 503
+    assert "GOOGLE_CLIENT_ID" in response.json()["detail"]

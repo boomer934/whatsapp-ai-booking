@@ -96,6 +96,16 @@
     </div>
 
     <div class="card">
+      <h2>Google Calendar dell'attività</h2>
+      <div class="badges" id="googleBadges"><span class="empty">Caricamento…</span></div>
+      <div class="actions">
+        <button class="btn primary" id="googleConnectBtn" hidden>Collega Google Calendar</button>
+        <button class="btn danger" id="googleDisconnectBtn" hidden>Scollega</button>
+      </div>
+      <div class="meta">Collegato il calendario, gli impegni presenti su Google non vengono proposti ai clienti e ogni prenotazione crea un evento.</div>
+    </div>
+
+    <div class="card">
       <h2>Stato conversazione</h2>
       <div class="badges" id="badges"><span class="empty">Nessuna conversazione</span></div>
       <pre id="context">{}</pre>
@@ -217,6 +227,45 @@ function addNotifications(items) {
   }
 }
 
+const GOOGLE_ERRORS = {
+  access_denied: "consenso negato su Google",
+  missing_scopes: "non hai concesso entrambi i permessi richiesti (disponibilità ed eventi)",
+  no_refresh_token: "Google non ha fornito un token permanente: scollega l'app dal tuo account Google e riprova",
+  invalid_state: "richiesta scaduta: riprova",
+  exchange_failed: "scambio del codice non riuscito (controlla Client ID, secret e redirect URI)",
+  not_configured: "credenziali Google mancanti in backend/.env",
+};
+
+async function loadGoogle() {
+  const tenantId = $("tenant").value;
+  if (!tenantId) return;
+  const badges = $("googleBadges");
+  try {
+    const g = await api(`google?tenant_id=${tenantId}`);
+    badges.innerHTML = "";
+    const b = document.createElement("span");
+    b.className = `badge ${g.connected ? "ai" : "warn"}`;
+    b.textContent = g.connected
+      ? `📅 Collegato${g.google_account_email ? " a " + g.google_account_email : ""} (${g.calendar_id})`
+      : "Non collegato: si usano solo orari di apertura e prenotazioni";
+    badges.appendChild(b);
+    $("googleConnectBtn").hidden = g.connected;
+    $("googleDisconnectBtn").hidden = !g.connected;
+  } catch (e) {
+    badges.innerHTML = "";
+    bubble("system error", `Google Calendar: ${e.message}`);
+  }
+}
+
+function showGoogleResult() {
+  const params = new URLSearchParams(location.search);
+  const result = params.get("google");
+  if (!result) return;
+  if (result === "connected") bubble("system", "✅ Google Calendar collegato.");
+  else bubble("system error", `Collegamento Google non riuscito: ${GOOGLE_ERRORS[params.get("reason")] || params.get("reason")}`);
+  history.replaceState(null, "", location.pathname);
+}
+
 async function refresh() {
   const { tenant_id, phone } = target();
   if (!tenant_id || !phone) return;
@@ -262,7 +311,8 @@ function selectTenant() {
   $("tenantTitle").textContent = t ? t.name : "Simulatore WhatsApp";
   $("avatar").textContent = t ? t.name.charAt(0).toUpperCase() : "?";
   localStorage.setItem("sim.tenant", $("tenant").value);
-  refresh();
+  refresh().then(showGoogleResult);
+  loadGoogle();
 }
 
 async function init() {
@@ -282,6 +332,22 @@ async function init() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send($("input").value); }
   });
   $("tenant").addEventListener("change", selectTenant);
+  $("googleConnectBtn").onclick = async () => {
+    try {
+      const { authorization_url } = await api("google/connect", {
+        method: "POST", body: JSON.stringify({ tenant_id: $("tenant").value }),
+      });
+      location.href = authorization_url;
+    } catch (e) {
+      bubble("system error", `Google Calendar: ${e.message}`);
+    }
+  };
+  $("googleDisconnectBtn").onclick = async () => {
+    if (!confirm("Scollegare Google Calendar da questa attività?")) return;
+    await api("google/disconnect", { method: "POST", body: JSON.stringify({ tenant_id: $("tenant").value }) });
+    bubble("system", "Google Calendar scollegato.");
+    loadGoogle();
+  };
   $("resumeBtn").onclick = async () => renderSnapshot(await api("resume-ai", { method: "POST", body: JSON.stringify(target()) }));
   $("resetBtn").onclick = async () => {
     const withBookings = $("resetBookings").checked;

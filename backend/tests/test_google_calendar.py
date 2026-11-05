@@ -238,3 +238,48 @@ def test_booking_without_calendar_does_nothing() -> None:
         uuid4(), start, start + timedelta(minutes=30),
     ))
     assert google.calls == []
+
+
+# ------------------------------------------------- flusso di sviluppo (simulatore)
+
+
+def state_of(url: str) -> str:
+    return parse_qs(urlparse(url).query)["state"][0]
+
+
+def test_dev_flow_disabled_by_default() -> None:
+    with pytest.raises(OAuthFlowError) as exc_info:
+        build_service(FakeGoogle(), FakeAdminStore()).dev_authorization_url(TENANT.id)
+    assert exc_info.value.code == "dev_disabled"
+
+
+def test_dev_flow_connects_without_user_and_returns_to_simulator() -> None:
+    admin = FakeAdminStore()  # nessun membro: il flusso dev non lo richiede
+    service = build_service(FakeGoogle(), admin, allow_dev_flow=True)
+    state = state_of(service.dev_authorization_url(TENANT.id))
+
+    assert service.return_target(state) == "simulator"
+    result = asyncio.run(service.complete_authorization("auth-code", state))
+    assert result.tenant_id == TENANT.id and result.return_to == "simulator"
+    assert TENANT.id in admin.credentials
+
+
+def test_dev_state_rejected_when_dev_flow_disabled() -> None:
+    """Uno state "dev" (stessa chiave) non deve funzionare in produzione."""
+    dev = build_service(FakeGoogle(), FakeAdminStore(), allow_dev_flow=True)
+    state = state_of(dev.dev_authorization_url(TENANT.id))
+    production = build_service(FakeGoogle(), FakeAdminStore())
+
+    assert production.return_target(state) == "dashboard"
+    with pytest.raises(OAuthFlowError) as exc_info:
+        asyncio.run(production.complete_authorization("auth-code", state))
+    assert exc_info.value.code == "invalid_state"
+
+
+def test_dashboard_flow_returns_to_dashboard() -> None:
+    service = build_service(FakeGoogle(), FakeAdminStore({(TENANT.id, USER)}), allow_dev_flow=True)
+    state = state_of(service.authorization_url(TENANT.id, USER))
+    assert service.return_target(state) == "dashboard"
+    assert service.return_target("spazzatura") == "dashboard"
+    assert service.return_target(None) == "dashboard"
+    assert asyncio.run(service.complete_authorization("auth-code", state)).return_to == "dashboard"

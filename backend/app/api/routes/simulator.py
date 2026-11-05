@@ -11,7 +11,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from backend.app.api.deps import get_simulator_service
+from backend.app.api.deps import get_google_calendar_service, get_simulator_service
+from backend.app.services.calendar.google_calendar import (
+    GoogleCalendarService,
+    GoogleConnectionStatus,
+    GoogleNotConfiguredError,
+    OAuthFlowError,
+)
 from backend.app.simulator.service import SimulatorService, SimulatorSnapshot, SimulatorTurn
 from backend.app.simulator.store import TenantSummary
 
@@ -35,6 +41,7 @@ router = APIRouter(
 )
 
 ServiceDep = Annotated[SimulatorService, Depends(get_simulator_service)]
+CalendarDep = Annotated[GoogleCalendarService, Depends(get_google_calendar_service)]
 
 
 class SendRequest(BaseModel):
@@ -81,3 +88,34 @@ async def resume_ai(body: ChatTarget, service: ServiceDep) -> SimulatorSnapshot:
 @router.post("/api/reset", status_code=status.HTTP_204_NO_CONTENT)
 async def reset(body: ResetRequest, service: ServiceDep) -> None:
     await service.reset(body.tenant_id, body.phone, body.include_bookings)
+
+
+class TenantTarget(BaseModel):
+    tenant_id: UUID
+
+
+class ConnectResponse(BaseModel):
+    authorization_url: str
+
+
+@router.get("/api/google", response_model=GoogleConnectionStatus)
+async def google_status(tenant_id: UUID, calendar: CalendarDep) -> GoogleConnectionStatus:
+    return await calendar.status(tenant_id)
+
+
+@router.post("/api/google/connect", response_model=ConnectResponse)
+async def google_connect(body: TenantTarget, calendar: CalendarDep) -> ConnectResponse:
+    try:
+        return ConnectResponse(authorization_url=calendar.dev_authorization_url(body.tenant_id))
+    except GoogleNotConfiguredError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Imposta GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET ed ENCRYPTION_KEY in backend/.env",
+        ) from exc
+    except OAuthFlowError as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+
+
+@router.post("/api/google/disconnect", status_code=status.HTTP_204_NO_CONTENT)
+async def google_disconnect(body: TenantTarget, calendar: CalendarDep) -> None:
+    await calendar.disconnect(body.tenant_id)
