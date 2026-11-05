@@ -63,12 +63,19 @@ class Settings(BaseSettings):
     google_client_secret: SecretStr = SecretStr("")
     google_redirect_uri: str = "http://localhost:8000/oauth/google/callback"
 
+    # Simulatore WhatsApp locale (/simulator): mai attivo in production.
+    simulator_enabled: bool = True
+
     # Sicurezza
     encryption_key: SecretStr = SecretStr("")
 
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def simulator_active(self) -> bool:
+        return self.simulator_enabled and not self.is_production
 
 
 @lru_cache

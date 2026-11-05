@@ -29,6 +29,9 @@ class BookingStatus(StrEnum):
 class MessagingProviderName(StrEnum):
     META = "meta"
     TWILIO = "twilio"
+    # Canale locale di sviluppo (simulatore): non esiste nel DB come provider di
+    # un tenant, il messaggio è instradato direttamente per tenant_id.
+    SIMULATOR = "simulator"
 
 
 class MemberRole(StrEnum):

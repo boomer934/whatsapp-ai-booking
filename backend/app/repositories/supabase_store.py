@@ -34,6 +34,7 @@ _CONVERSATION_COLUMNS = (
 _ROUTING_COLUMN: dict[MessagingProviderName, str] = {
     MessagingProviderName.META: "wa_phone_number_id",
     MessagingProviderName.TWILIO: "wa_phone_e164",
+    MessagingProviderName.SIMULATOR: "id",
 }
 
 

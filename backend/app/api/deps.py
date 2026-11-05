@@ -14,6 +14,8 @@ from backend.app.services.conversation.state_machine import AiReplyEngine
 from backend.app.services.llm.factory import build_llm_client
 from backend.app.services.messaging.factory import build_messaging_clients
 from backend.app.services.notifications import WhatsAppOperatorNotifier
+from backend.app.simulator.service import SimulatorService
+from backend.app.simulator.store import SupabaseSimulatorStore
 
 
 @lru_cache
@@ -37,16 +39,37 @@ def get_google_calendar_service() -> GoogleCalendarService:
 
 
 @lru_cache
+def get_interpreter() -> MessageInterpreter:
+    return MessageInterpreter(build_llm_client(get_settings()))
+
+
+@lru_cache
+def get_availability() -> AvailabilityService:
+    return AvailabilityService(
+        CombinedBusyProvider(get_conversation_store(), get_google_calendar_service())
+    )
+
+
+@lru_cache
 def get_inbound_processor() -> InboundProcessor:
-    settings = get_settings()
     store = get_conversation_store()
-    calendar = get_google_calendar_service()
-    senders = build_messaging_clients(settings)
+    senders = build_messaging_clients(get_settings())
     engine = AiReplyEngine(
         store=store,
-        interpreter=MessageInterpreter(build_llm_client(settings)),
-        availability=AvailabilityService(CombinedBusyProvider(store, calendar)),
+        interpreter=get_interpreter(),
+        availability=get_availability(),
         notifier=WhatsAppOperatorNotifier(senders),
-        booking_sync=calendar,
+        booking_sync=get_google_calendar_service(),
     )
     return InboundProcessor(store=store, engine=engine, senders=senders)
+
+
+@lru_cache
+def get_simulator_service() -> SimulatorService:
+    return SimulatorService(
+        store=get_conversation_store(),
+        sim_store=SupabaseSimulatorStore(),
+        interpreter=get_interpreter(),
+        availability=get_availability(),
+        booking_sync=get_google_calendar_service(),
+    )

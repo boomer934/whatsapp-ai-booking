@@ -33,6 +33,7 @@ Micro-SaaS B2B che automatizza la qualificazione dei lead e la prenotazione degl
 │   │   ├── core/           # config.py (pydantic-settings), db.py (client Supabase async), security.py (firme webhook), crypto.py (Fernet)
 │   │   ├── models/         # enums.py, schemas.py (Pydantic)
 │   │   ├── repositories/   # base.py (Protocol ConversationStore), supabase_store.py, tenant_admin.py (membership + credenziali Google)
+│   │   ├── simulator/      # simulatore WhatsApp locale: service.py, store.py, static/index.html
 │   │   └── services/
 │   │       ├── llm/            # groq_client, gemini_client, factory (fallback), prompts
 │   │       ├── messaging/      # meta_whatsapp, twilio_whatsapp, factory
@@ -63,7 +64,14 @@ Tutti i comandi si lanciano dalla radice del repository (gli import sono `backen
 - Test: `python -m pytest backend/tests -q`
 - Type check: `python -m mypy backend/app backend/main.py --ignore-missing-imports`
 
-**Test WhatsApp in locale (Twilio Sandbox — a pagamento, alternativa: Meta Cloud API)**
+**Simulatore WhatsApp (metodo principale per i test end-to-end)**
+
+1. Avviare il backend: `uvicorn backend.main:app --reload --port 8000`.
+2. Aprire `http://localhost:8000/simulator`: chat in stile WhatsApp + pannello con stato, prenotazioni, notifiche all'operatore, "Riprendi AI" e reset.
+3. Usa la pipeline reale (LLM, Supabase, Google Calendar); solo l'invio è catturato (`MessagingProviderName.SIMULATOR`, instradamento per `tenant_id`). Nessun messaggio reale parte, nemmeno verso l'operatore.
+4. Attivo solo se `ENVIRONMENT != production` e `SIMULATOR_ENABLED=true`; accetta solo richieste locali (rifiuta header di proxy/tunnel). Usare numeri cliente di test (`+3900000000xx`) e il reset per pulire.
+
+**Test WhatsApp reale in locale (Twilio Sandbox — a pagamento, alternativa: Meta Cloud API)**
 
 1. Tunnel: `cloudflared tunnel --url http://localhost:8000` (quick tunnel, nessun account; l'URL cambia a ogni avvio).
 2. Avviare il backend con `PUBLIC_BASE_URL=<url del tunnel>` (necessario per la verifica firma Twilio dietro proxy).
@@ -99,4 +107,5 @@ Tutti i comandi si lanciano dalla radice del repository (gli import sono `backen
 - [x] Step 7: Google Calendar (OAuth per tenant, free/busy, evento alla conferma) — verificato su Supabase reale con Google simulato; manca il test con un client OAuth Google reale
 - [ ] Step 8: dashboard Next.js (servizi, orari, toggle AI, chat in manuale, prenotazioni)
 - [ ] Step 9: deploy Render + Vercel e webhook definitivi (token Meta permanente di "utente di sistema", redirect URI Google di produzione)
-- Da fare prima della produzione: template WhatsApp approvato per le notifiche all'operatore (finestra di 24h di Meta); gestione disdette/spostamenti (oggi vanno all'operatore).
+- [x] Simulatore WhatsApp locale per test end-to-end senza provider (verificato con AI e DB reali)
+- Da fare prima della produzione: template WhatsApp approvato per le notifiche all'operatore (finestra di 24h di Meta); gestione disdette/spostamenti (oggi vanno all'operatore); **soggetto giuridico verificabile (es. partita IVA) per la verifica business Meta e l'App Review necessarie all'onboarding dei clienti (Embedded Signup)**; test WhatsApp reale con numero di test Meta.

@@ -74,16 +74,18 @@ class FakeStore:
         self.conversations: dict[tuple[UUID, str], Conversation] = {}
         self.inbound_ids: set[tuple[UUID, str]] = set()
         self.outbound: list[tuple[UUID, str, str | None]] = []
+        # Storico (conversation_id, direzione, testo) per le viste del simulatore.
+        self.log: list[tuple[UUID, str, str]] = []
 
     async def get_tenant_by_routing_key(
         self, provider: MessagingProviderName, routing_key: str
     ) -> Tenant | None:
         for tenant in self.tenants:
-            key = (
-                tenant.wa_phone_number_id
-                if provider == MessagingProviderName.META
-                else tenant.wa_phone_e164
-            )
+            key = {
+                MessagingProviderName.META: tenant.wa_phone_number_id,
+                MessagingProviderName.TWILIO: tenant.wa_phone_e164,
+                MessagingProviderName.SIMULATOR: str(tenant.id),
+            }[provider]
             if key == routing_key:
                 return tenant
         return None
@@ -111,12 +113,14 @@ class FakeStore:
         if key in self.inbound_ids:
             return False
         self.inbound_ids.add(key)
+        self.log.append((conversation.id, "inbound", message.text or "[messaggio non testuale]"))
         return True
 
     async def save_outbound_message(
         self, conversation: Conversation, body: str, provider_message_id: str | None
     ) -> None:
         self.outbound.append((conversation.id, body, provider_message_id))
+        self.log.append((conversation.id, "outbound", body))
 
 
 class FakeSender(MessagingClient):

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulatore WhatsApp · AI Booking</title>
+<style>
+  :root {
+    --wa-green: #008069; --wa-bubble-out: #d9fdd3; --wa-bg: #efeae2; --wa-panel: #f0f2f5;
+    --text: #111b21; --muted: #667781; --border: #d1d7db; --danger: #c62828; --warn: #b26a00;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         color: var(--text); background: #dfe3e6; height: 100vh; display: flex; gap: 16px; padding: 16px; }
+  .phone { width: 420px; min-width: 340px; display: flex; flex-direction: column; border-radius: 16px;
+           overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,.15); background: var(--wa-bg); }
+  .chat-header { background: var(--wa-green); color: #fff; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: #dfe5e7; color: var(--wa-green);
+            display: grid; place-items: center; font-weight: 700; }
+  .chat-header .title { font-weight: 600; }
+  .chat-header .subtitle { font-size: 12px; opacity: .85; }
+  .messages { flex: 1; overflow-y: auto; padding: 16px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .bubble { max-width: 82%; padding: 6px 9px 4px; border-radius: 8px; font-size: 14.5px; line-height: 1.35;
+            white-space: pre-wrap; word-wrap: break-word; box-shadow: 0 1px .5px rgba(0,0,0,.13); }
+  .bubble .time { display: block; text-align: right; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .in  { align-self: flex-start; background: #fff; }
+  .out { align-self: flex-end; background: var(--wa-bubble-out); }
+  .system { align-self: center; background: #fff7d6; color: #54470f; font-size: 12.5px; text-align: center; max-width: 90%; }
+  .system.error { background: #fde7e7; color: var(--danger); }
+  .typing { align-self: flex-start; background: #fff; color: var(--muted); font-style: italic; }
+  .chips { display: flex; gap: 6px; padding: 6px 10px; overflow-x: auto; background: var(--wa-panel); }
+  .chip { flex: none; border: 1px solid var(--border); background: #fff; border-radius: 16px; padding: 5px 10px;
+          font-size: 12.5px; cursor: pointer; }
+  .chip:hover { background: #e9f7f3; }
+  form.composer { display: flex; gap: 8px; padding: 10px; background: var(--wa-panel); }
+  .composer textarea { flex: 1; resize: none; border: none; border-radius: 8px; padding: 10px 12px; font: inherit; height: 42px; }
+  .composer button { border: none; background: var(--wa-green); color: #fff; border-radius: 50%; width: 42px; height: 42px;
+                     font-size: 18px; cursor: pointer; }
+  .composer button:disabled { opacity: .5; cursor: wait; }
+
+  .panel { flex: 1; min-width: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+  .card { background: #fff; border-radius: 12px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+  label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 8px; }
+  input, select { width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; font: inherit; margin-top: 3px; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .badge { font-size: 12px; padding: 3px 8px; border-radius: 10px; background: #e9edef; }
+  .badge.ai { background: #d9fdd3; color: #0b5d1e; }
+  .badge.manual { background: #fde7e7; color: var(--danger); }
+  .badge.warn { background: #fff1d6; color: var(--warn); }
+  pre { background: #f7f8fa; border-radius: 6px; padding: 8px; font-size: 12px; margin: 0; max-height: 180px; overflow: auto; }
+  .list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+  .list li { border-left: 3px solid var(--wa-green); padding: 4px 8px; background: #f7f8fa; border-radius: 4px; white-space: pre-wrap; }
+  .list li.notify { border-color: var(--warn); }
+  .empty { color: var(--muted); font-size: 13px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .btn { border: 1px solid var(--border); background: #fff; border-radius: 6px; padding: 7px 12px; cursor: pointer; font: inherit; font-size: 13.5px; }
+  .btn.primary { background: var(--wa-green); border-color: var(--wa-green); color: #fff; }
+  .btn.danger { color: var(--danger); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .inline { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .inline input { width: auto; margin: 0; }
+  .meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+</style>
+</head>
+<body>
+  <section class="phone">
+    <header class="chat-header">
+      <div class="avatar" id="avatar">?</div>
+      <div>
+        <div class="title" id="tenantTitle">Simulatore WhatsApp</div>
+        <div class="subtitle" id="chatStatus">seleziona un'attività</div>
+      </div>
+    </header>
+    <div class="messages" id="messages"></div>
+    <div class="chips" id="chips"></div>
+    <form class="composer" id="composer">
+      <textarea id="input" placeholder="Scrivi un messaggio come cliente…" autocomplete="off"></textarea>
+      <button type="submit" id="sendBtn" title="Invia">➤</button>
+    </form>
+  </section>
+
+  <aside class="panel">
+    <div class="card">
+      <h2>Cliente simulato</h2>
+      <label>Attività
+        <select id="tenant"></select>
+      </label>
+      <div class="row">
+        <label>Numero cliente <input id="phone" value="+390000000001"></label>
+        <label>Nome profilo <input id="name" value="Cliente Test"></label>
+      </div>
+      <div class="meta">I messaggi passano dalla pipeline reale (AI, database, calendario). Nessun messaggio WhatsApp viene inviato davvero.</div>
+    </div>
+
+    <div class="card">
+      <h2>Stato conversazione</h2>
+      <div class="badges" id="badges"><span class="empty">Nessuna conversazione</span></div>
+      <pre id="context">{}</pre>
+      <div class="meta" id="latency"></div>
+    </div>
+
+    <div class="card">
+      <h2>Prenotazioni di questo cliente</h2>
+      <ul class="list" id="bookings"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Notifiche all'operatore</h2>
+      <ul class="list" id="notifications"><li class="empty" style="border:none;background:none">Nessuna notifica</li></ul>
+    </div>
+
+    <div class="card">
+      <h2>Azioni</h2>
+      <div class="actions">
+        <button class="btn primary" id="resumeBtn" disabled>Riprendi AI (come l'operatore)</button>
+        <button class="btn danger" id="resetBtn">Nuova conversazione</button>
+        <label class="inline"><input type="checkbox" id="resetBookings"> cancella anche le prenotazioni</label>
+      </div>
+    </div>
+  </aside>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const STATE_LABELS = {
+  idle: "In attesa", selecting_service: "Scelta servizio", selecting_slot: "Scelta orario",
+  confirming: "Conferma", completed: "Completata",
+};
+const SAMPLES = [
+  "Ciao, vorrei un taglio uomo domani alle 15", "Quanto costa la piega?", "il secondo", "sì, confermo",
+  "no, meglio nel pomeriggio", "avete posto sabato mattina?", "voglio parlare con una persona", "asdfgh",
+];
+let tenants = [];
+let busy = false;
+
+function api(path, options = {}) {
+  return fetch(`/simulator/api/${path}`, {
+    headers: { "Content-Type": "application/json" }, ...options,
+  }).then(async (res) => {
+    if (res.status === 204) return null;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : `HTTP ${res.status}`);
+    return data;
+  });
+}
+
+const target = () => ({ tenant_id: $("tenant").value, phone: $("phone").value.trim() });
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+const fmtSlot = (iso) => new Date(iso).toLocaleString("it-IT", {
+  weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+});
+
+function bubble(cls, text, time) {
+  const el = document.createElement("div");
+  el.className = `bubble ${cls}`;
+  el.textContent = text;
+  if (time) {
+    const t = document.createElement("span");
+    t.className = "time";
+    t.textContent = time;
+    el.appendChild(t);
+  }
+  $("messages").appendChild(el);
+  $("messages").scrollTop = $("messages").scrollHeight;
+  return el;
+}
+
+function renderSnapshot(snapshot, extra = []) {
+  $("messages").innerHTML = "";
+  if (!snapshot.messages.length) bubble("system", "Inizia la conversazione scrivendo come farebbe un cliente.");
+  for (const m of snapshot.messages) {
+    bubble(m.direction === "inbound" ? "out" : "in", m.body, fmtTime(m.created_at));
+  }
+  for (const [cls, text] of extra) bubble(cls, text);
+
+  const c = snapshot.conversation;
+  const badges = $("badges");
+  badges.innerHTML = "";
+  if (!c) {
+    badges.innerHTML = '<span class="empty">Nessuna conversazione</span>';
+    $("context").textContent = "{}";
+  } else {
+    const add = (text, cls = "") => {
+      const b = document.createElement("span");
+      b.className = `badge ${cls}`; b.textContent = text; badges.appendChild(b);
+    };
+    add(c.mode === "ai" ? "🤖 Gestita dall'AI" : "👤 In mano all'operatore", c.mode);
+    add(`Fase: ${STATE_LABELS[c.state] || c.state}`);
+    add(`Incomprensioni consecutive: ${c.failed_attempts}/2`, c.failed_attempts ? "warn" : "");
+    $("context").textContent = JSON.stringify(c.context, null, 2);
+  }
+  $("resumeBtn").disabled = !c || c.mode !== "manual";
+  $("chatStatus").textContent = !c ? "nuova chat" : c.mode === "manual" ? "operatore umano" : "assistente AI attivo";
+
+  const list = $("bookings");
+  list.innerHTML = "";
+  if (!snapshot.bookings.length) list.innerHTML = '<li class="empty" style="border:none;background:none">Nessuna prenotazione</li>';
+  for (const b of snapshot.bookings) {
+    const li = document.createElement("li");
+    const gcal = b.google_event_id ? " · 📅 su Google" : "";
+    li.textContent = `${b.service_name || "Servizio"} — ${fmtSlot(b.starts_at)} (${b.status})${gcal}`;
+    list.appendChild(li);
+  }
+}
+
+function addNotifications(items) {
+  if (!items.length) return;
+  const list = $("notifications");
+  if (list.querySelector(".empty")) list.innerHTML = "";
+  for (const text of items) {
+    const li = document.createElement("li");
+    li.className = "notify";
+    li.textContent = `${new Date().toLocaleTimeString("it-IT")}\n${text}`;
+    list.prepend(li);
+  }
+}
+
+async function refresh() {
+  const { tenant_id, phone } = target();
+  if (!tenant_id || !phone) return;
+  try {
+    renderSnapshot(await api(`conversation?tenant_id=${tenant_id}&phone=${encodeURIComponent(phone)}`));
+  } catch (e) {
+    bubble("system error", `Errore nel caricamento: ${e.message}`);
+  }
+}
+
+async function send(text) {
+  text = text.trim();
+  if (!text || busy) return;
+  busy = true;
+  $("sendBtn").disabled = true;
+  $("input").value = "";
+  bubble("out", text, fmtTime(new Date().toISOString()));
+  const typing = bubble("typing", "sta scrivendo…");
+  try {
+    const turn = await api("messages", {
+      method: "POST",
+      body: JSON.stringify({ ...target(), name: $("name").value.trim() || null, text }),
+    });
+    typing.remove();
+    const extra = [];
+    if (turn.note) extra.push(["system", turn.note]);
+    if (turn.error) extra.push(["system error", `Errore: ${turn.error}`]);
+    renderSnapshot(turn.snapshot, extra);
+    addNotifications(turn.operator_notifications);
+    $("latency").textContent = `Ultima risposta in ${(turn.elapsed_ms / 1000).toFixed(1)} s`;
+  } catch (e) {
+    typing.remove();
+    bubble("system error", `Errore: ${e.message}`);
+  } finally {
+    busy = false;
+    $("sendBtn").disabled = false;
+    $("input").focus();
+  }
+}
+
+function selectTenant() {
+  const t = tenants.find((x) => x.id === $("tenant").value);
+  $("tenantTitle").textContent = t ? t.name : "Simulatore WhatsApp";
+  $("avatar").textContent = t ? t.name.charAt(0).toUpperCase() : "?";
+  localStorage.setItem("sim.tenant", $("tenant").value);
+  refresh();
+}
+
+async function init() {
+  for (const key of ["phone", "name"]) {
+    const saved = localStorage.getItem(`sim.${key}`);
+    if (saved) $(key).value = saved;
+    $(key).addEventListener("change", () => { localStorage.setItem(`sim.${key}`, $(key).value); refresh(); });
+  }
+  for (const s of SAMPLES) {
+    const chip = document.createElement("button");
+    chip.className = "chip"; chip.type = "button"; chip.textContent = s;
+    chip.onclick = () => send(s);
+    $("chips").appendChild(chip);
+  }
+  $("composer").addEventListener("submit", (e) => { e.preventDefault(); send($("input").value); });
+  $("input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send($("input").value); }
+  });
+  $("tenant").addEventListener("change", selectTenant);
+  $("resumeBtn").onclick = async () => renderSnapshot(await api("resume-ai", { method: "POST", body: JSON.stringify(target()) }));
+  $("resetBtn").onclick = async () => {
+    const withBookings = $("resetBookings").checked;
+    if (!confirm(withBookings ? "Cancellare conversazione e prenotazioni di questo cliente?" : "Cancellare la conversazione di questo cliente?")) return;
+    await api("reset", { method: "POST", body: JSON.stringify({ ...target(), include_bookings: withBookings }) });
+    $("notifications").innerHTML = '<li class="empty" style="border:none;background:none">Nessuna notifica</li>';
+    refresh();
+  };
+
+  try {
+    tenants = await api("tenants");
+  } catch (e) {
+    bubble("system error", `Impossibile caricare le attività: ${e.message}`);
+    return;
+  }
+  if (!tenants.length) {
+    bubble("system error", "Nessuna attività nel database: esegui il seed (supabase/seed.sql).");
+    return;
+  }
+  for (const t of tenants) {
+    const opt = document.createElement("option");
+    opt.value = t.id;
+    opt.textContent = `${t.name}${t.ai_enabled ? "" : " (AI disattivata)"}`;
+    $("tenant").appendChild(opt);
+  }
+  const saved = localStorage.getItem("sim.tenant");
+  if (saved && tenants.some((t) => t.id === saved)) $("tenant").value = saved;
+  selectTenant();
+}
+
+init();
+</script>
+</body>
+</html>

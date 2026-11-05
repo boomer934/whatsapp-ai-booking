@@ -26,6 +26,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(api_router)
+    if settings.simulator_active:
+        # Import locale: in production il modulo non viene nemmeno caricato.
+        from backend.app.api.routes import simulator
+
+        app.include_router(simulator.router)
     return app
 
 
