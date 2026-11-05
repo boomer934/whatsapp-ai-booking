@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR: Path = Path(__file__).resolve().parents[2]
@@ -25,9 +25,16 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     frontend_url: str = "http://localhost:3000"
 
-    # Supabase
+    # Supabase (URL base del progetto; chiave service_role o "sb_secret_...")
     supabase_url: str = ""
     supabase_service_role_key: SecretStr = SecretStr("")
+
+    @field_validator("supabase_url")
+    @classmethod
+    def _normalize_supabase_url(cls, value: str) -> str:
+        """Accetta anche l'URL REST copiato dalla dashboard (…/rest/v1/)."""
+        value = value.strip().rstrip("/")
+        return value.removesuffix("/rest/v1")
 
     # URL pubblico del backend (es. https://xxx.onrender.com). Serve a ricostruire
     # l'URL esatto firmato da Twilio quando l'app gira dietro un proxy.
