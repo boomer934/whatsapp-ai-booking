@@ -19,6 +19,8 @@ function translateAuthError(message: string): string {
   if (m.includes("already registered") || m.includes("already been registered"))
     return "Esiste già un account con questa email: accedi.";
   if (m.includes("password")) return "Password non valida: usa almeno 8 caratteri.";
+  if (m.includes("email rate limit"))
+    return "Abbiamo raggiunto il limite di email di conferma inviabili: riprova tra un'ora.";
   if (m.includes("rate limit") || m.includes("too many"))
     return "Troppi tentativi: riprova tra qualche minuto.";
   return message;
