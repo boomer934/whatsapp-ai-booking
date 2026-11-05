@@ -19,6 +19,7 @@ def create_app() -> FastAPI:
         title="WhatsApp AI Booking API",
         version="0.1.0",
         docs_url=None if settings.is_production else "/docs",
+        openapi_url=None if settings.is_production else "/openapi.json",
         redoc_url=None,
     )
     app.add_middleware(

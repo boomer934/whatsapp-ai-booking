@@ -52,3 +52,19 @@ def test_app_refuses_to_start_with_bad_production_config(monkeypatch: pytest.Mon
     finally:
         monkeypatch.undo()
         get_settings.cache_clear()
+
+
+def test_api_schema_hidden_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi.testclient import TestClient
+
+    for key, value in PRODUCTION_ENV.items():
+        monkeypatch.setenv(key, value)
+    get_settings.cache_clear()
+    try:
+        client = TestClient(create_app())
+        assert client.get("/openapi.json").status_code == 404
+        assert client.get("/docs").status_code == 404
+        assert client.get("/health").status_code == 200
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()
