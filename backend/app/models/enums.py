@@ -26,6 +26,11 @@ class BookingStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class MessagingProviderName(StrEnum):
+    META = "meta"
+    TWILIO = "twilio"
+
+
 class MemberRole(StrEnum):
     OWNER = "owner"
     STAFF = "staff"

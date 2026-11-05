@@ -29,8 +29,11 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_service_role_key: SecretStr = SecretStr("")
 
-    # Messaging
-    messaging_provider: Literal["meta", "twilio"] = "meta"
+    # URL pubblico del backend (es. https://xxx.onrender.com). Serve a ricostruire
+    # l'URL esatto firmato da Twilio quando l'app gira dietro un proxy.
+    public_base_url: str = ""
+
+    # Messaging (il provider usato è quello del webhook in arrivo)
     meta_verify_token: SecretStr = SecretStr("")
     meta_app_secret: SecretStr = SecretStr("")
     meta_access_token: SecretStr = SecretStr("")

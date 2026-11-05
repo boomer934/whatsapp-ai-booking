@@ -18,8 +18,8 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      - key: MESSAGING_PROVIDER
-        value: meta
+      - key: PUBLIC_BASE_URL
+        sync: false
       - key: META_VERIFY_TOKEN
         sync: false
       - key: META_APP_SECRET
