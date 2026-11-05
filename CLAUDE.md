@@ -68,6 +68,7 @@ Tutti i comandi si lanciano dalla radice del repository (gli import sono `backen
 
 1. Avviare il backend: `uvicorn backend.main:app --reload --port 8000`.
 2. Aprire `http://localhost:8000/simulator`: chat in stile WhatsApp + pannello con stato, prenotazioni, notifiche all'operatore, "Riprendi AI" e reset.
+   Il riquadro "Google Calendar" collega/scollega il calendario del tenant (flusso OAuth di sviluppo, accettato solo con simulatore attivo). Dopo aver modificato `backend/.env` riavviare uvicorn: `--reload` non rilegge il file.
 3. Usa la pipeline reale (LLM, Supabase, Google Calendar); solo l'invio è catturato (`MessagingProviderName.SIMULATOR`, instradamento per `tenant_id`). Nessun messaggio reale parte, nemmeno verso l'operatore.
 4. Attivo solo se `ENVIRONMENT != production` e `SIMULATOR_ENABLED=true`; accetta solo richieste locali (rifiuta header di proxy/tunnel). Usare numeri cliente di test (`+3900000000xx`) e il reset per pulire.
 
@@ -104,7 +105,7 @@ Tutti i comandi si lanciano dalla radice del repository (gli import sono `backen
 - [x] Step 1-3: scaffold, backend base, schema Supabase + RLS (migrazioni applicate sul progetto Supabase, seed inserito)
 - [x] Step 4: webhook Meta/Twilio con verifica firma e deduplica
 - [x] Step 5-6: interpretazione AI, macchina a stati, disponibilità, handover — verificati con LLM e DB reali
-- [x] Step 7: Google Calendar (OAuth per tenant, free/busy, evento alla conferma) — verificato su Supabase reale con Google simulato; manca il test con un client OAuth Google reale
+- [x] Step 7: Google Calendar (OAuth per tenant, free/busy, evento alla conferma) — verificato con account Google reale: collegamento dal simulatore, lettura free/busy ed evento creato alla prenotazione. Client OAuth di sviluppo in modalità "Test" (redirect `http://localhost:8000/oauth/google/callback`); in produzione servirà un redirect URI del backend su Render e la verifica dell'app Google.
 - [ ] Step 8: dashboard Next.js (servizi, orari, toggle AI, chat in manuale, prenotazioni)
 - [ ] Step 9: deploy Render + Vercel e webhook definitivi (token Meta permanente di "utente di sistema", redirect URI Google di produzione)
 - [x] Simulatore WhatsApp locale per test end-to-end senza provider (verificato con AI e DB reali)
