@@ -141,6 +141,7 @@ class FakeBookingStore(FakeStore):
         self.services = services or []
         self.hours = hours if hours is not None else weekly_hours()
         self.bookings: list[tuple[UUID, datetime, datetime]] = []
+        self.google_events: dict[UUID, str] = {}
         self.updates = 0
 
     async def update_conversation(self, conversation: Conversation) -> None:
@@ -169,6 +170,11 @@ class FakeBookingStore(FakeStore):
             return None
         self.bookings.append((service.id, starts_at, ends_at))
         return uuid4()
+
+    async def set_booking_google_event(
+        self, tenant_id: UUID, booking_id: UUID, google_event_id: str
+    ) -> None:
+        self.google_events[booking_id] = google_event_id
 
 
 class ScriptedLLM:

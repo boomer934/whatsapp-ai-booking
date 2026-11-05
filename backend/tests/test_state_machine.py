@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from backend.app.models.enums import ConversationMode, ConversationState, MessagingProviderName
 from backend.app.models.schemas import Conversation
-from backend.app.services.calendar.availability import AvailabilityService
+from backend.app.services.calendar.availability import AvailabilityService, CombinedBusyProvider
 from backend.app.services.conversation.inbound import InboundProcessor
 from backend.app.services.conversation.interpreter import MessageInterpreter
 from backend.app.services.conversation.state_machine import NON_TEXT_REPLY, AiReplyEngine
@@ -30,7 +30,12 @@ TOMORROW = "2026-11-06"
 
 
 class Harness:
-    def __init__(self, *llm_responses: dict[str, Any] | LLMError, single_service: bool = False) -> None:
+    def __init__(
+        self,
+        *llm_responses: dict[str, Any] | LLMError,
+        single_service: bool = False,
+        calendar: Any = None,
+    ) -> None:
         self.tenant = make_tenant()
         all_services = [
             make_service(self.tenant.id, "Taglio donna", 45, 3500),
@@ -42,11 +47,15 @@ class Harness:
         self.store = FakeBookingStore([self.tenant], self.services)
         self.llm = ScriptedLLM(*llm_responses)
         self.notifier = RecordingNotifier()
+        # Con un calendario esterno (GoogleCalendarService) si usa la stessa
+        # composizione di produzione: DB + free/busy, ed eventi alla conferma.
+        provider = CombinedBusyProvider(self.store, calendar) if calendar else self.store
         self.engine = AiReplyEngine(
             store=self.store,
             interpreter=MessageInterpreter(self.llm),
-            availability=AvailabilityService(self.store),
+            availability=AvailabilityService(provider),
             notifier=self.notifier,
+            booking_sync=calendar,
             clock=lambda: NOW.astimezone(UTC),
         )
         self._counter = 0
@@ -146,9 +155,26 @@ def test_slot_taken_between_proposal_and_confirmation() -> None:
     h.store.bookings.append((uuid4(), friday_15, friday_15.replace(hour=16)))  # altro cliente
 
     reply = h.send("sì")
-    assert reply is not None and reply.startswith("Quell'orario è appena stato prenotato.")
+    assert reply is not None and reply.startswith("Quell'orario non è più disponibile.")
     assert h.conversation.state == ConversationState.SELECTING_SLOT
     assert len(h.store.bookings) == 1
+
+
+def test_concurrent_booking_rejected_by_database() -> None:
+    """Ricontrollo superato ma il DB rifiuta (gara con un'altra prenotazione)."""
+    h = Harness(booking(service_number=2, date=TOMORROW, time="15:00"), {"intent": "confirm"})
+    h.send("taglio uomo domani alle 15")
+
+    async def rejected(*args: object) -> None:
+        # Un altro cliente ha appena occupato lo stesso orario.
+        friday_15 = datetime(2026, 11, 6, 15, 0, tzinfo=ROME)
+        h.store.bookings.append((uuid4(), friday_15, friday_15.replace(minute=30)))
+        return None
+
+    h.store.create_booking = rejected  # type: ignore[method-assign]
+    reply = h.send("sì")
+    assert reply is not None and reply.startswith("Quell'orario è appena stato prenotato.")
+    assert h.conversation.state == ConversationState.SELECTING_SLOT
 
 
 # ------------------------------------------------------- domande e rifiuti

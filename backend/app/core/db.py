@@ -5,6 +5,7 @@ dato che la service role key non applica le policy RLS.
 """
 
 import asyncio
+from typing import Any, cast
 
 from supabase import AsyncClient, acreate_client
 
@@ -34,3 +35,8 @@ async def get_supabase() -> AsyncClient:
                 )
             _client = await acreate_client(settings.supabase_url, key)
     return _client
+
+
+def as_rows(data: Any) -> list[dict[str, Any]]:
+    """Le risposte PostgREST sono tipizzate come JSON generico: qui diventano righe."""
+    return cast(list[dict[str, Any]], data)

@@ -1,7 +1,8 @@
 """Calcolo degli slot liberi: orari di apertura meno intervalli occupati.
 
-Gli intervalli occupati arrivano da un BusyProvider: oggi le prenotazioni nel DB,
-dallo step 7 anche il free/busy di Google Calendar.
+Gli intervalli occupati arrivano da un BusyProvider: le prenotazioni nel DB e,
+se il tenant ha collegato un calendario, il free/busy di Google Calendar
+(CombinedBusyProvider).
 """
 
 from collections.abc import Sequence
@@ -27,6 +28,10 @@ PART_OF_DAY_RANGES: dict[PartOfDay, tuple[time, time]] = {
 }
 
 
+class CalendarUnavailableError(RuntimeError):
+    """Il calendario esterno collegato non è consultabile: non si propongono orari."""
+
+
 class BusyProvider(Protocol):
     async def list_business_hours(self, tenant_id: UUID) -> list[BusinessHours]: ...
 
@@ -35,17 +40,44 @@ class BusyProvider(Protocol):
     ) -> list[Interval]: ...
 
 
+class ExternalCalendar(Protocol):
+    async def busy_intervals(
+        self, tenant_id: UUID, start: datetime, end: datetime
+    ) -> list[Interval]:
+        """Può sollevare CalendarUnavailableError."""
+        ...
+
+
+class CombinedBusyProvider:
+    """Prenotazioni del DB + impegni del calendario esterno del tenant."""
+
+    def __init__(self, store: BusyProvider, calendar: ExternalCalendar) -> None:
+        self._store = store
+        self._calendar = calendar
+
+    async def list_business_hours(self, tenant_id: UUID) -> list[BusinessHours]:
+        return await self._store.list_business_hours(tenant_id)
+
+    async def list_busy_intervals(
+        self, tenant_id: UUID, start: datetime, end: datetime
+    ) -> list[Interval]:
+        own = await self._store.list_busy_intervals(tenant_id, start, end)
+        external = await self._calendar.busy_intervals(tenant_id, start, end)
+        return own + external
+
+
 def is_slot_free(
     start: datetime,
     duration: timedelta,
     hours: Sequence[BusinessHours],
     busy: Sequence[Interval],
     now: datetime,
+    min_lead: timedelta = MIN_LEAD_TIME,
 ) -> bool:
     """True se [start, start+duration) è dentro una fascia di apertura, nel futuro
     (con preavviso minimo) e non si sovrappone a intervalli occupati."""
     end = start + duration
-    if start < now + MIN_LEAD_TIME or end.date() != start.date():
+    if start < now + min_lead or end.date() != start.date():
         return False
     weekday = start.weekday()
     inside_hours = any(
@@ -89,6 +121,19 @@ def _in_part_of_day(slot: datetime, part: PartOfDay | None) -> bool:
 class AvailabilityService:
     def __init__(self, provider: BusyProvider) -> None:
         self._provider = provider
+
+    async def is_available(
+        self, tenant: Tenant, service: Service, start: datetime, now: datetime
+    ) -> bool:
+        """Ricontrolla uno slot subito prima di prenotarlo (gli impegni possono
+        essere cambiati dopo la proposta). Può sollevare CalendarUnavailableError."""
+        duration = timedelta(minutes=service.duration_minutes)
+        start = start.astimezone(ZoneInfo(tenant.timezone))
+        hours = await self._provider.list_business_hours(tenant.id)
+        busy = await self._provider.list_busy_intervals(tenant.id, start, start + duration)
+        return is_slot_free(
+            start, duration, hours, busy, now.astimezone(start.tzinfo), min_lead=timedelta(0)
+        )
 
     async def find_slots(
         self,

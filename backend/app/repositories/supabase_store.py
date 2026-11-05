@@ -4,12 +4,12 @@ Usa la service role key: ogni query filtra esplicitamente per tenant_id.
 """
 
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 from postgrest.exceptions import APIError
 
-from backend.app.core.db import get_supabase
+from backend.app.core.db import as_rows, get_supabase
 from backend.app.models.enums import BookingStatus, MessageDirection, MessagingProviderName
 from backend.app.models.schemas import (
     BusinessHours,
@@ -23,10 +23,6 @@ from backend.app.models.schemas import (
 EXCLUSION_VIOLATION = "23P01"
 _SERVICE_COLUMNS = "id, tenant_id, name, duration_minutes, price_cents, is_active"
 
-
-def _rows(data: Any) -> list[dict[str, Any]]:
-    """Le risposte PostgREST sono tipizzate come JSON generico: qui diventano righe."""
-    return cast(list[dict[str, Any]], data)
 
 _TENANT_COLUMNS = (
     "id, name, timezone, ai_enabled, messaging_provider, "
@@ -53,7 +49,7 @@ class SupabaseConversationStore:
             .limit(1)
             .execute()
         )
-        rows = _rows(response.data)
+        rows = as_rows(response.data)
         return Tenant.model_validate(rows[0]) if rows else None
 
     async def get_or_create_conversation(
@@ -201,7 +197,7 @@ class SupabaseConversationStore:
         )
         return [
             (datetime.fromisoformat(row["starts_at"]), datetime.fromisoformat(row["ends_at"]))
-            for row in _rows(response.data)
+            for row in as_rows(response.data)
         ]
 
     async def create_booking(
@@ -232,4 +228,16 @@ class SupabaseConversationStore:
             if exc.code == EXCLUSION_VIOLATION:
                 return None
             raise
-        return UUID(str(_rows(response.data)[0]["id"]))
+        return UUID(str(as_rows(response.data)[0]["id"]))
+
+    async def set_booking_google_event(
+        self, tenant_id: UUID, booking_id: UUID, google_event_id: str
+    ) -> None:
+        db = await get_supabase()
+        await (
+            db.table("bookings")
+            .update({"google_event_id": google_event_id})
+            .eq("id", str(booking_id))
+            .eq("tenant_id", str(tenant_id))
+            .execute()
+        )

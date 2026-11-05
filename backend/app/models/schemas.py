@@ -57,6 +57,15 @@ class BusinessHours(BaseModel):
     close_time: time
 
 
+class GoogleCredentials(BaseModel):
+    """Collegamento Google Calendar di un tenant (refresh token cifrato)."""
+
+    tenant_id: UUID
+    google_account_email: str | None = None
+    refresh_token_encrypted: str
+    calendar_id: str = "primary"
+
+
 class Conversation(BaseModel):
     id: UUID
     tenant_id: UUID

@@ -13,12 +13,17 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Protocol
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from backend.app.models.enums import MAX_FAILED_ATTEMPTS, ConversationMode, ConversationState
 from backend.app.models.schemas import Conversation, InboundMessage, Service, Tenant
 from backend.app.repositories.base import ConversationStore
-from backend.app.services.calendar.availability import AvailabilityService
+from backend.app.services.calendar.availability import (
+    AvailabilityService,
+    CalendarUnavailableError,
+)
 from backend.app.services.conversation.context import BookingContext
 from backend.app.services.conversation.formatting import (
     format_service_list,
@@ -36,6 +41,35 @@ from backend.app.services.notifications import Notifier
 logger = logging.getLogger(__name__)
 
 NON_TEXT_REPLY = "Per ora riesco a leggere solo messaggi di testo. Puoi scrivermi?"
+CALENDAR_DOWN_REASON = "il calendario collegato non è raggiungibile: verificare il collegamento Google"
+
+
+class BookingSync(Protocol):
+    """Notificato dopo ogni prenotazione confermata (es. evento su Google Calendar).
+    Le implementazioni non devono sollevare eccezioni."""
+
+    async def on_booking_confirmed(
+        self,
+        tenant: Tenant,
+        conversation: Conversation,
+        service: Service,
+        booking_id: UUID,
+        start: datetime,
+        end: datetime,
+    ) -> None: ...
+
+
+class NoBookingSync:
+    async def on_booking_confirmed(
+        self,
+        tenant: Tenant,
+        conversation: Conversation,
+        service: Service,
+        booking_id: UUID,
+        start: datetime,
+        end: datetime,
+    ) -> None:
+        return None
 
 
 @dataclass
@@ -65,12 +99,14 @@ class AiReplyEngine:
         interpreter: MessageInterpreter,
         availability: AvailabilityService,
         notifier: Notifier,
+        booking_sync: BookingSync | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._store = store
         self._interpreter = interpreter
         self._availability = availability
         self._notifier = notifier
+        self._booking_sync: BookingSync = booking_sync or NoBookingSync()
         self._clock = clock
 
     # ------------------------------------------------------------------ entry
@@ -203,14 +239,17 @@ class AiReplyEngine:
 
     async def _propose(self, turn: _Turn, service: Service, prefix: str = "") -> str:
         ctx = turn.context
-        slots = await self._availability.find_slots(
-            turn.tenant, service, turn.now, ctx.day, ctx.at, ctx.part_of_day
-        )
-        has_preferences = any(v is not None for v in (ctx.day, ctx.at, ctx.part_of_day))
-        if not slots and has_preferences:
-            prefix += "In quel momento non ho disponibilità. "
-            ctx.day, ctx.at, ctx.part_of_day = None, None, None
-            slots = await self._availability.find_slots(turn.tenant, service, turn.now)
+        try:
+            slots = await self._availability.find_slots(
+                turn.tenant, service, turn.now, ctx.day, ctx.at, ctx.part_of_day
+            )
+            has_preferences = any(v is not None for v in (ctx.day, ctx.at, ctx.part_of_day))
+            if not slots and has_preferences:
+                prefix += "In quel momento non ho disponibilità. "
+                ctx.day, ctx.at, ctx.part_of_day = None, None, None
+                slots = await self._availability.find_slots(turn.tenant, service, turn.now)
+        except CalendarUnavailableError:
+            return await self._handover(turn, CALENDAR_DOWN_REASON)
         if not slots:
             return await self._handover(turn, f"nessuna disponibilità trovata per {service.name}")
 
@@ -240,7 +279,14 @@ class AiReplyEngine:
             return await self._fail(turn)
 
         start = ctx.selected_slot.astimezone(turn.now.tzinfo)
-        if start <= turn.now:
+        # Ricontrollo: il tempo passa e il titolare può aver aggiunto impegni.
+        try:
+            still_free = await self._availability.is_available(
+                turn.tenant, service, start, turn.now
+            )
+        except CalendarUnavailableError:
+            return await self._handover(turn, CALENDAR_DOWN_REASON)
+        if not still_free:
             ctx.selected_slot = None
             return await self._propose(turn, service, "Quell'orario non è più disponibile. ")
 
@@ -252,6 +298,9 @@ class AiReplyEngine:
 
         turn.context = BookingContext()
         await self._save(turn, ConversationState.COMPLETED)
+        await self._booking_sync.on_booking_confirmed(
+            turn.tenant, turn.conversation, service, booking_id, start, end
+        )
         return (
             f"Prenotazione confermata ✅\n{service.name}, {format_slot(start)}.\n"
             f"A presto da {turn.tenant.name}!"

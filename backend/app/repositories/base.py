@@ -67,3 +67,9 @@ class ConversationStore(Protocol):
     ) -> UUID | None:
         """Crea la prenotazione. None se lo slot è già occupato (vincolo anti-overlap)."""
         ...
+
+    async def set_booking_google_event(
+        self, tenant_id: UUID, booking_id: UUID, google_event_id: str
+    ) -> None:
+        """Associa alla prenotazione l'evento creato su Google Calendar."""
+        ...
