@@ -1,9 +1,8 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { type ActionState, fail, field, ok } from "@/lib/action-state";
+import { type ActionState, fail, field } from "@/lib/action-state";
 import { createClient } from "@/lib/supabase/server";
 
 /** Solo percorsi interni: evita open redirect verso siti esterni. */
@@ -35,25 +34,6 @@ export async function signIn(_prev: ActionState, formData: FormData): Promise<Ac
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return fail(translateAuthError(error.message));
   redirect(safeNext(field(formData, "next")));
-}
-
-export async function signUp(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const email = field(formData, "email");
-  const password = field(formData, "password");
-  if (!email.includes("@")) return fail("Inserisci un'email valida.");
-  if (password.length < 8) return fail("La password deve avere almeno 8 caratteri.");
-
-  const origin = (await headers()).get("origin") ?? "http://localhost:3000";
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: { emailRedirectTo: `${origin}/auth/callback?next=/onboarding` },
-  });
-  if (error) return fail(translateAuthError(error.message));
-  // Con la conferma email disattivata la sessione è già attiva.
-  if (data.session) redirect("/onboarding");
-  return ok("Ti abbiamo inviato un'email: clicca il link per confermare l'account, poi accedi.");
 }
 
 export async function signOut(): Promise<void> {
