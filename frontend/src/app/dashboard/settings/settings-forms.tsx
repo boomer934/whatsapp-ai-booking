@@ -43,7 +43,7 @@ export function TenantForm({ tenant }: { tenant: TenantRow }) {
         />
       </div>
       <FormMessage state={state} />
-      <SubmitButton>Salva</SubmitButton>
+      <SubmitButton className="w-full sm:w-auto">Salva</SubmitButton>
     </form>
   );
 }
@@ -51,8 +51,8 @@ export function TenantForm({ tenant }: { tenant: TenantRow }) {
 export function GoogleConnectButton() {
   const [state, action] = useActionState(connectGoogle, null);
   return (
-    <form action={action} className="space-y-2">
-      <SubmitButton pendingText="Apertura di Google…">Collega Google Calendar</SubmitButton>
+    <form action={action} className="w-full space-y-2 sm:w-auto">
+      <SubmitButton className="w-full sm:w-auto" pendingText="Apertura di Google…">Collega Google Calendar</SubmitButton>
       <FormMessage state={state} />
     </form>
   );
@@ -63,12 +63,12 @@ export function GoogleDisconnectButton() {
   return (
     <form
       action={action}
-      className="space-y-2"
+      className="w-full space-y-2 sm:w-auto"
       onSubmit={(e) => {
         if (!confirm("Scollegare Google Calendar? L'assistente non vedrà più i tuoi impegni.")) e.preventDefault();
       }}
     >
-      <SubmitButton variant="danger" pendingText="Scollegamento…">
+      <SubmitButton variant="danger" className="w-full sm:w-auto" pendingText="Scollegamento…">
         Scollega
       </SubmitButton>
       <FormMessage state={state} />

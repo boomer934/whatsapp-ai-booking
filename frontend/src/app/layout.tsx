@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 
 import "./globals.css";
@@ -13,10 +13,15 @@ export const metadata: Metadata = {
   description: "Prenotazioni automatiche su WhatsApp per attività locali",
 };
 
+export const viewport: Viewport = {
+  themeColor: "#ffffff",
+  viewportFit: "cover",
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="it" className={`${geistSans.variable} h-full antialiased`}>
-      <body className="min-h-full bg-slate-50 font-sans text-slate-900">{children}</body>
+      <body className="min-h-dvh bg-slate-50 font-sans text-slate-900">{children}</body>
     </html>
   );
 }

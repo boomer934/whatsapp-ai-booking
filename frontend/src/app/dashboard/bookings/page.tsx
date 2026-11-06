@@ -64,12 +64,12 @@ async function Bookings({ searchParams }: { searchParams: PageProps<"/dashboard/
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 text-sm">
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 text-sm sm:mx-0 sm:px-0">
         {(Object.keys(VIEWS) as View[]).map((v) => (
           <Link
             key={v}
             href={v === "upcoming" ? "?" : `?view=${v}`}
-            className={`rounded-full px-3 py-1 ${view === v ? "bg-emerald-700 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}
+            className={`shrink-0 rounded-full px-3 py-1.5 ${view === v ? "bg-emerald-700 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}
           >
             {VIEWS[v]}
           </Link>
@@ -87,25 +87,28 @@ async function Bookings({ searchParams }: { searchParams: PageProps<"/dashboard/
               {items.map((b) => {
                 const who = b.customer_name ?? b.customer_phone;
                 return (
-                  <li key={b.id} className="flex flex-wrap items-center gap-4 py-3">
-                    <div className="w-28 shrink-0 font-semibold tabular-nums">
+                  <li
+                    key={b.id}
+                    className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 py-3 sm:flex sm:items-center sm:gap-4"
+                  >
+                    <div className="font-semibold tabular-nums sm:w-28 sm:shrink-0">
                       {formatTime(b.starts_at, tenant.timezone)}–{formatTime(b.ends_at, tenant.timezone)}
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 sm:flex-1">
                       <p className="font-medium">{serviceName.get(b.service_id ?? "") ?? "Servizio eliminato"}</p>
-                      <p className="text-sm text-slate-500">
+                      <p className="break-words text-sm text-slate-500">
                         {who}
                         {b.customer_name ? (
                           <>
                             {" · "}
-                            <a href={`tel:${b.customer_phone}`} className="hover:underline">
+                            <a href={`tel:${b.customer_phone}`} className="whitespace-nowrap hover:underline">
                               {b.customer_phone}
                             </a>
                           </>
                         ) : null}
                       </p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="col-span-2 flex flex-wrap items-center justify-end gap-3 empty:hidden sm:col-auto sm:flex-nowrap">
                       {b.google_event_id ? <Badge tone="green">📅 Google</Badge> : null}
                       {b.status === "cancelled" ? <Badge tone="red">Annullata</Badge> : null}
                       {view === "upcoming" ? <CancelBookingButton bookingId={b.id} label={who} /> : null}

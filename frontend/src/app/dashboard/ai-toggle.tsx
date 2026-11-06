@@ -18,7 +18,7 @@ export function AiToggle({ enabled }: { enabled: boolean }) {
     });
 
   return (
-    <div className="flex flex-wrap items-center gap-4">
+    <div className="flex flex-wrap items-center gap-3 sm:gap-4">
       <button
         type="button"
         role="switch"
@@ -36,7 +36,7 @@ export function AiToggle({ enabled }: { enabled: boolean }) {
           }`}
         />
       </button>
-      <div>
+      <div className="min-w-0 flex-1">
         <p className="font-medium">
           {optimistic ? "L'assistente risponde ai clienti" : "Assistente spento"}
         </p>

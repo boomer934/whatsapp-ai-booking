@@ -24,7 +24,7 @@ export function CancelBookingButton({ bookingId, label }: { bookingId: string; l
       >
         {pending ? "Annullamento…" : "Annulla"}
       </button>
-      {result?.error ? <p className="max-w-56 text-right text-xs text-rose-700">{result.error}</p> : null}
+      {result?.error ? <p className="max-w-full text-right sm:max-w-56 text-xs text-rose-700">{result.error}</p> : null}
     </div>
   );
 }

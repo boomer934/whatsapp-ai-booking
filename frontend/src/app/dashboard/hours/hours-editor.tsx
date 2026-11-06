@@ -45,10 +45,13 @@ export function HoursEditor({ initial }: { initial: HourRange[] }) {
         {WEEKDAYS.map((dayName, day) => {
           const ranges = week[day];
           return (
-            <li key={dayName} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start">
-              <div className="w-32 shrink-0 pt-2 font-medium">{dayName}</div>
-              <div className="flex-1 space-y-2">
-                {ranges.length === 0 ? <p className="pt-2 text-sm text-slate-400">Chiuso</p> : null}
+            <li
+              key={dayName}
+              className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 py-4 lg:flex lg:items-start lg:gap-3"
+            >
+              <div className="self-center font-medium lg:w-32 lg:shrink-0 lg:self-auto lg:pt-2">{dayName}</div>
+              <div className="col-span-2 row-start-2 space-y-2 lg:flex-1">
+                {ranges.length === 0 ? <p className="text-sm text-slate-400 lg:pt-2">Chiuso</p> : null}
                 {ranges.map((r) => (
                   <div key={r.key} className="flex items-center gap-2">
                     <input
@@ -58,7 +61,7 @@ export function HoursEditor({ initial }: { initial: HourRange[] }) {
                       onChange={(e) =>
                         update(day, (rs) => rs.map((x) => (x.key === r.key ? { ...x, open: e.target.value } : x)))
                       }
-                      className={`${inputClass} max-w-32`}
+                      className={`${inputClass} min-w-0 flex-1 sm:max-w-32`}
                     />
                     <span className="text-slate-400">–</span>
                     <input
@@ -68,12 +71,12 @@ export function HoursEditor({ initial }: { initial: HourRange[] }) {
                       onChange={(e) =>
                         update(day, (rs) => rs.map((x) => (x.key === r.key ? { ...x, close: e.target.value } : x)))
                       }
-                      className={`${inputClass} max-w-32`}
+                      className={`${inputClass} min-w-0 flex-1 sm:max-w-32`}
                     />
                     <button
                       type="button"
                       aria-label={`Rimuovi fascia ${dayName}`}
-                      className="rounded-lg px-2 py-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 sm:h-9 sm:w-9"
                       onClick={() => update(day, (rs) => rs.filter((x) => x.key !== r.key))}
                     >
                       ✕
@@ -81,10 +84,10 @@ export function HoursEditor({ initial }: { initial: HourRange[] }) {
                   </div>
                 ))}
               </div>
-              <div className="flex shrink-0 gap-3 sm:pt-2">
+              <div className="flex shrink-0 items-center gap-4 lg:gap-3 lg:pt-2">
                 <button
                   type="button"
-                  className={buttonClass.link}
+                  className={`${buttonClass.link} py-2 disabled:opacity-40 disabled:no-underline`}
                   disabled={ranges.length >= 4}
                   onClick={() => {
                     const last = ranges.at(-1);
@@ -94,7 +97,7 @@ export function HoursEditor({ initial }: { initial: HourRange[] }) {
                   + Fascia
                 </button>
                 {ranges.length ? (
-                  <button type="button" className={buttonClass.link} onClick={() => copyToAll(day)}>
+                  <button type="button" className={`${buttonClass.link} py-2 disabled:opacity-40 disabled:no-underline`} onClick={() => copyToAll(day)}>
                     Copia su tutti
                   </button>
                 ) : null}
@@ -103,8 +106,11 @@ export function HoursEditor({ initial }: { initial: HourRange[] }) {
           );
         })}
       </ul>
-      <FormMessage state={state} />
-      <SubmitButton>Salva orari</SubmitButton>
+      {/* Su mobile il salvataggio resta a portata di pollice mentre si scorre la settimana. */}
+      <div className="sticky bottom-0 -mx-4 space-y-3 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+        <FormMessage state={state} />
+        <SubmitButton className="w-full sm:w-auto">Salva orari</SubmitButton>
+      </div>
     </form>
   );
 }

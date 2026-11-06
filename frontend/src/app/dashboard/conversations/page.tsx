@@ -61,31 +61,32 @@ async function Conversations({ searchParams }: { searchParams: Search }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-      <Card>
-        <div className="mb-3 flex gap-2 text-sm">
+      {/* Su schermi piccoli si vede la lista oppure la chat aperta, non entrambe. */}
+      <Card className={selected ? "hidden lg:block" : ""}>
+        <div className="-mx-1 mb-3 flex gap-2 overflow-x-auto px-1 pb-1 text-sm">
           {(["all", "manual"] as const).map((f) => (
             <Link
               key={f}
               href={href({ filter: f, c: selected?.id })}
-              className={`rounded-full px-3 py-1 ${filter === f ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"}`}
+              className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 ${filter === f ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"}`}
             >
               {f === "all" ? "Tutte" : "In attesa dell'operatore"}
             </Link>
           ))}
         </div>
         {conversations.length ? (
-          <ul className="-mx-2 max-h-[65vh] overflow-y-auto">
+          <ul className="-mx-2 lg:max-h-[70dvh] lg:overflow-y-auto">
             {conversations.map((c) => (
               <li key={c.id}>
                 <Link
                   href={href({ c: c.id })}
-                  className={`flex items-center justify-between gap-2 rounded-lg px-2 py-2.5 text-sm ${
+                  className={`flex items-center justify-between gap-2 rounded-lg px-2 py-3 text-sm lg:py-2.5 ${
                     c.id === selected?.id ? "bg-emerald-50" : "hover:bg-slate-50"
                   }`}
                 >
-                  <span className="min-w-0">
+                  <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{c.customer_name ?? c.customer_phone}</span>
-                    <span className="block text-xs text-slate-500">{STATE_LABELS[c.state] ?? c.state}</span>
+                    <span className="block truncate text-xs text-slate-500">{STATE_LABELS[c.state] ?? c.state}</span>
                   </span>
                   <span className="flex shrink-0 flex-col items-end gap-1">
                     {c.mode === "manual" ? <Badge tone="red">Operatore</Badge> : null}
@@ -104,9 +105,17 @@ async function Conversations({ searchParams }: { searchParams: Search }) {
         )}
       </Card>
 
-      <Card>
+      <Card className={selected ? "" : "hidden lg:block"}>
         {selected ? (
-          <ConversationDetail conversation={selected} timeZone={tenant.timezone} />
+          <>
+            <Link
+              href={href({})}
+              className="-mt-1 mb-3 inline-flex min-h-11 items-center gap-1 text-sm font-medium text-emerald-700 lg:hidden"
+            >
+              ← Tutte le chat
+            </Link>
+            <ConversationDetail conversation={selected} timeZone={tenant.timezone} />
+          </>
         ) : (
           <EmptyState>Seleziona una conversazione per leggere i messaggi.</EmptyState>
         )}
@@ -129,12 +138,12 @@ async function ConversationDetail({ conversation, timeZone }: { conversation: Co
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
-        <div>
-          <p className="font-semibold">{conversation.customer_name ?? "Cliente"}</p>
+        <div className="min-w-0">
+          <p className="truncate font-semibold">{conversation.customer_name ?? "Cliente"}</p>
           <a href={`tel:${conversation.customer_phone}`} className="text-sm text-slate-500 hover:underline">
             {conversation.customer_phone}
           </a>
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             {conversation.mode === "manual" ? (
               <Badge tone="red">👤 Gestita dall&apos;operatore</Badge>
             ) : (
@@ -153,13 +162,14 @@ async function ConversationDetail({ conversation, timeZone }: { conversation: Co
         </p>
       ) : null}
 
-      <div className="max-h-[55vh] space-y-2 overflow-y-auto rounded-lg bg-[#efeae2] p-3">
+      {/* Ordine inverso + flex-col-reverse: la chat si apre già sull'ultimo messaggio. */}
+      <div className="-mx-4 flex max-h-[65dvh] flex-col-reverse gap-2 overflow-y-auto bg-[#efeae2] p-3 sm:mx-0 sm:rounded-lg">
         {messages.length ? (
-          messages.map((m) => (
+          [...messages].reverse().map((m) => (
             <div
               key={m.id}
-              className={`max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm shadow-sm ${
-                m.direction === "inbound" ? "bg-white" : "ml-auto bg-[#d9fdd3]"
+              className={`max-w-[85%] whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-sm shadow-sm ${
+                m.direction === "inbound" ? "mr-auto bg-white" : "ml-auto bg-[#d9fdd3]"
               }`}
             >
               {m.body}

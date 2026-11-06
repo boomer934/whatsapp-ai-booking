@@ -91,16 +91,16 @@ async function GoogleSettings() {
       {problem ? (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{problem}</p>
       ) : status?.connected ? (
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
             <Badge tone="green">Collegato</Badge>
-            <span>{status.google_account_email ?? "Account Google"}</span>
-            <span className="text-slate-400">· calendario {status.calendar_id}</span>
+            <span className="min-w-0 break-all">{status.google_account_email ?? "Account Google"}</span>
+            <span className="min-w-0 break-all text-slate-400">· calendario {status.calendar_id}</span>
           </div>
           <GoogleDisconnectButton />
         </div>
       ) : (
-        <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
           <Badge tone="amber">Non collegato</Badge>
           <GoogleConnectButton />
         </div>
@@ -113,7 +113,7 @@ async function WhatsAppSettings() {
   const { tenant } = await getTenantContext();
   const number = tenant.wa_phone_e164 ?? tenant.wa_phone_number_id;
   return number ? (
-    <div className="flex items-center gap-2 text-sm">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
       <Badge tone="green">Collegato</Badge>
       <span>{tenant.wa_phone_e164 ?? `ID ${tenant.wa_phone_number_id}`}</span>
       <span className="text-slate-400">({tenant.messaging_provider === "meta" ? "WhatsApp Cloud API" : "Twilio"})</span>

@@ -26,7 +26,8 @@ function ServiceFields({ service, values }: { service?: ServiceRow; values?: Rec
         aria-label="Nome del servizio"
         className={`${inputClass} sm:flex-[2]`}
       />
-      <div className="flex items-center gap-1 sm:flex-1">
+      <div className="grid grid-cols-2 gap-3 sm:contents">
+      <div className="flex min-w-0 items-center gap-1 sm:flex-1">
         <input
           name="duration_minutes"
           type="number"
@@ -40,7 +41,7 @@ function ServiceFields({ service, values }: { service?: ServiceRow; values?: Rec
         />
         <span className="text-sm text-slate-500">min</span>
       </div>
-      <div className="flex items-center gap-1 sm:flex-1">
+      <div className="flex min-w-0 items-center gap-1 sm:flex-1">
         <input
           name="price"
           inputMode="decimal"
@@ -50,6 +51,7 @@ function ServiceFields({ service, values }: { service?: ServiceRow; values?: Rec
           className={inputClass}
         />
         <span className="text-sm text-slate-500">€</span>
+      </div>
       </div>
     </>
   );
@@ -61,7 +63,9 @@ export function NewServiceForm() {
     <form action={action} className="space-y-3">
       <div className="flex flex-col gap-3 sm:flex-row">
         <ServiceFields key={state?.success ?? "new"} values={state?.values} />
-        <SubmitButton pendingText="Aggiunta…">Aggiungi</SubmitButton>
+        <SubmitButton pendingText="Aggiunta…" className="w-full sm:w-auto">
+          Aggiungi
+        </SubmitButton>
       </div>
       <FormMessage state={state} />
     </form>
@@ -89,7 +93,7 @@ export function ServiceRowItem({ service }: { service: ServiceRow }) {
           <div className="flex flex-col gap-3 sm:flex-row">
             <ServiceFields service={service} values={state?.values} />
           </div>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex">
             <SubmitButton>Salva</SubmitButton>
             <button type="button" className={buttonClass.secondary} onClick={() => setEditing(false)}>
               Annulla
@@ -104,7 +108,7 @@ export function ServiceRowItem({ service }: { service: ServiceRow }) {
   return (
     <li className={`flex flex-wrap items-center gap-3 py-3 ${pending ? "opacity-60" : ""}`}>
       <div className="min-w-0 flex-1">
-        <p className="font-medium">
+        <p className="break-words font-medium">
           {service.name}{" "}
           {!service.is_active ? <Badge tone="amber">Non prenotabile</Badge> : null}
         </p>
@@ -113,7 +117,7 @@ export function ServiceRowItem({ service }: { service: ServiceRow }) {
         </p>
         {rowResult?.error ? <p className="text-sm text-rose-700">{rowResult.error}</p> : null}
       </div>
-      <div className="flex gap-2">
+      <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto max-sm:[&>button]:px-2">
         <button type="button" className={buttonClass.secondary} onClick={() => setEditing(true)}>
           Modifica
         </button>

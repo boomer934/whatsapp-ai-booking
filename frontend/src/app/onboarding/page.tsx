@@ -12,8 +12,8 @@ export const metadata: Metadata = { title: "Configura la tua attività" };
 
 export default function OnboardingPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+    <main className="flex min-h-dvh items-center justify-center px-4 py-8">
+      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <h1 className="text-xl font-semibold">Benvenuto! 👋</h1>
         <p className="mb-6 mt-1 text-sm text-slate-500">
           Crea la tua attività: poi aggiungerai servizi e orari e l&apos;assistente sarà pronto a

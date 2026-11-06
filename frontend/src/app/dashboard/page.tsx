@@ -93,7 +93,7 @@ async function Overview() {
                 {s.done ? (
                   <span className="text-slate-400 line-through">{s.label}</span>
                 ) : (
-                  <Link href={s.href} className={buttonClass.link}>
+                  <Link href={s.href} className={`py-1 ${buttonClass.link}`}>
                     {s.label}
                   </Link>
                 )}
@@ -103,10 +103,10 @@ async function Overview() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Appuntamenti oggi" value={todayBookings.count ?? 0} />
-        <Stat label="Prossimi appuntamenti" value={upcoming.data?.length ?? 0} suffix={upcoming.data?.length === 5 ? "+" : ""} />
-        <Stat label="Chat in attesa dell'operatore" value={manualChats.data?.length ?? 0} tone={manualChats.data?.length ? "red" : "slate"} />
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <Stat label="Appuntamenti oggi" short="Oggi" value={todayBookings.count ?? 0} />
+        <Stat label="Prossimi appuntamenti" short="In arrivo" value={upcoming.data?.length ?? 0} suffix={upcoming.data?.length === 5 ? "+" : ""} />
+        <Stat label="Chat in attesa dell'operatore" short="Da gestire" value={manualChats.data?.length ?? 0} tone={manualChats.data?.length ? "red" : "slate"} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -115,11 +115,11 @@ async function Overview() {
             <ul className="divide-y divide-slate-100">
               {upcoming.data.map((b) => (
                 <li key={b.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                  <div>
-                    <p className="font-medium">{b.customer_name ?? b.customer_phone}</p>
-                    <p className="text-slate-500">{serviceNames.get(b.service_id ?? "") ?? "Servizio"}</p>
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{b.customer_name ?? b.customer_phone}</p>
+                    <p className="truncate text-slate-500">{serviceNames.get(b.service_id ?? "") ?? "Servizio"}</p>
                   </div>
-                  <span className="text-right text-slate-700">{formatDateTime(b.starts_at, tenant.timezone)}</span>
+                  <span className="shrink-0 text-right text-slate-700">{formatDateTime(b.starts_at, tenant.timezone)}</span>
                 </li>
               ))}
             </ul>
@@ -136,13 +136,13 @@ async function Overview() {
             <ul className="divide-y divide-slate-100">
               {manualChats.data.map((c) => (
                 <li key={c.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                  <div>
-                    <p className="font-medium">{c.customer_name ?? c.customer_phone}</p>
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{c.customer_name ?? c.customer_phone}</p>
                     <p className="text-slate-500">
                       {c.last_message_at ? formatShort(c.last_message_at, tenant.timezone) : "—"}
                     </p>
                   </div>
-                  <Link href={`/dashboard/conversations?c=${c.id}`} className={buttonClass.link}>
+                  <Link href={`/dashboard/conversations?c=${c.id}`} className={`shrink-0 py-2 ${buttonClass.link}`}>
                     Apri
                   </Link>
                 </li>
@@ -165,20 +165,29 @@ async function loadServiceNames(tenantId: string, ids: (string | null)[] | undef
   return new Map((data ?? []).map((s) => [s.id, s.name]));
 }
 
-function Stat({ label, value, suffix = "", tone = "slate" }: {
+function Stat({ label, short, value, suffix = "", tone = "slate" }: {
   label: string;
+  /** Etichetta breve per gli schermi stretti. */
+  short: string;
   value: number;
   suffix?: string;
   tone?: "slate" | "red";
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className={`mt-1 text-3xl font-semibold ${tone === "red" && value ? "text-rose-600" : ""}`}>
+    <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5">
+      <p className="text-xs leading-tight text-slate-500 sm:text-sm">
+        <span className="sm:hidden">{short}</span>
+        <span className="hidden sm:inline">{label}</span>
+      </p>
+      <p className={`mt-1 text-2xl font-semibold tabular-nums sm:text-3xl ${tone === "red" && value ? "text-rose-600" : ""}`}>
         {value}
         {suffix}
       </p>
-      {tone === "red" && value ? <Badge tone="red">Richiede attenzione</Badge> : null}
+      {tone === "red" && value ? (
+        <span className="hidden sm:inline-flex">
+          <Badge tone="red">Richiede attenzione</Badge>
+        </span>
+      ) : null}
     </div>
   );
 }
