@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     meta_verify_token: SecretStr = SecretStr("")
     meta_app_secret: SecretStr = SecretStr("")
     meta_access_token: SecretStr = SecretStr("")
-    meta_graph_api_version: str = "v21.0"
+    meta_graph_api_version: str = "v25.0"
     twilio_account_sid: str = ""
     twilio_auth_token: SecretStr = SecretStr("")
 
