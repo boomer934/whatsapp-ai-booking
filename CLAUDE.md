@@ -9,7 +9,7 @@ Micro-SaaS B2B che automatizza la qualificazione dei lead e la prenotazione degl
 - **Database e Autenticazione:** Supabase (PostgreSQL) con RLS.
 - **Motore AI / LLM:** Groq `openai/gpt-oss-20b` (primario) con fallback automatico su Gemini `gemini-3.5-flash-lite`. I modelli Llama non sono più disponibili su Groq e `gemini-2.5-flash` non è attivabile per nuovi account: verificare sempre i modelli disponibili prima di cambiarli.
 - **Integrazioni:** WhatsApp Cloud API di Meta (canale scelto: numero di test gratuito, risposte entro 24h gratuite; configurazione in corso) / Twilio (supportato ma a pagamento, non usato), Google Calendar via OAuth per tenant.
-- **Repository:** https://github.com/boomer934/whatsapp-ai-booking (privato, branch `main`).
+- **Repository:** https://github.com/boomer934/whatsapp-ai-booking (pubblico in sola consultazione, licenza "tutti i diritti riservati", branch `main`; email Git noreply di GitHub).
 - **Produzione:** backend https://whatsapp-ai-booking-syjn.onrender.com (Render, Web Service Free, deploy automatico da `main`), dashboard https://whatsapp-ai-booking.vercel.app (Vercel Hobby, Root Directory `frontend`, deploy automatico da `main`). Stesso progetto Supabase dell'ambiente locale.
 
 ## 2. Architettura e Principi di Progettazione
