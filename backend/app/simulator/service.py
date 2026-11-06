@@ -65,7 +65,9 @@ class SimulatorService:
         interpreter: MessageInterpreter,
         availability: AvailabilityService,
         booking_sync: BookingSync | None = None,
+        privacy_url: str | None = None,
     ) -> None:
+        self._privacy_url = privacy_url
         self._store = store
         self._sim_store = sim_store
         self._interpreter = interpreter
@@ -90,7 +92,9 @@ class SimulatorService:
             notifier=WhatsAppOperatorNotifier(senders),
             booking_sync=self._booking_sync,
         )
-        processor = InboundProcessor(store=self._store, engine=engine, senders=senders)
+        processor = InboundProcessor(
+            store=self._store, engine=engine, senders=senders, privacy_url=self._privacy_url
+        )
         message = InboundMessage(
             provider=MessagingProviderName.SIMULATOR,
             provider_message_id=f"sim-{uuid4()}",

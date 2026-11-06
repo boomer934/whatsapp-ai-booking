@@ -99,3 +99,25 @@ def test_process_safely_swallows_errors() -> None:
 
     processor, _ = build(BrokenStore([]))
     asyncio.run(processor.process_safely(make_message()))  # non deve sollevare
+
+
+def test_first_reply_carries_ai_disclosure_and_privacy_link() -> None:
+    store = FakeStore([make_tenant()])
+    sender = FakeSender()
+    processor = InboundProcessor(
+        store=store,
+        engine=EchoEngine(),
+        senders={MessagingProviderName.META: sender},
+        privacy_url="https://esempio.it/privacy",
+    )
+
+    asyncio.run(processor.process(make_message(provider_message_id="m1", text="ciao")))
+    asyncio.run(processor.process(make_message(provider_message_id="m2", text="ancora")))
+
+    first, second = (text for _, _, text in sender.sent)
+    assert first.startswith("eco: ciao\n\n")
+    assert "assistente automatico" in first
+    assert "parlare con una persona" in first
+    assert first.endswith("Informativa privacy: https://esempio.it/privacy")
+    # L'avviso compare una sola volta per cliente.
+    assert second == "eco: ancora"

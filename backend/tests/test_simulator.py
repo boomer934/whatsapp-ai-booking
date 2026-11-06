@@ -13,6 +13,7 @@ from backend.app.core.config import get_settings
 from backend.app.models.enums import ConversationMode, MessageDirection
 from backend.app.models.schemas import Conversation
 from backend.app.services.calendar.availability import AvailabilityService
+from backend.app.services.conversation.inbound import ai_disclosure
 from backend.app.services.conversation.interpreter import MessageInterpreter
 from backend.app.simulator.service import SimulatorService
 from backend.app.simulator.store import BookingSummary, ChatMessage, TenantSummary
@@ -106,13 +107,14 @@ def test_message_runs_real_pipeline_and_returns_reply(make_env: Any) -> None:
     env = make_env({"intent": "greeting", "answer": "Ciao! Vuoi prenotare?"})
     turn = env.send("buongiorno").json()
 
-    assert turn["replies"] == ["Ciao! Vuoi prenotare?"]
+    # La prima risposta a un cliente porta l'avviso sull'assistente automatico.
+    assert turn["replies"] == [f"Ciao! Vuoi prenotare?\n\n{ai_disclosure(None)}"]
     assert turn["operator_notifications"] == [] and turn["error"] is None
     snapshot = turn["snapshot"]
     assert snapshot["conversation"]["mode"] == "ai"
     assert [(m["direction"], m["body"]) for m in snapshot["messages"]] == [
         ("inbound", "buongiorno"),
-        ("outbound", "Ciao! Vuoi prenotare?"),
+        ("outbound", turn["replies"][0]),
     ]
 
 
@@ -148,7 +150,7 @@ def test_phone_is_normalized(make_env: Any) -> None:
     env = make_env({"intent": "greeting", "answer": "Ciao!"})
     body = {"tenant_id": str(env.tenant.id), "phone": "39 000 000 0001", "text": "ciao"}
     turn = env.client.post("/simulator/api/messages", json=body).json()
-    assert turn["replies"] == ["Ciao!"]
+    assert turn["replies"] == [f"Ciao!\n\n{ai_disclosure(None)}"]
     assert (env.tenant.id, PHONE) in env.store.conversations
 
 

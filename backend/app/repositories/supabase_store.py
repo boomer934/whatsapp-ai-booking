@@ -142,6 +142,19 @@ class SupabaseConversationStore:
             .execute()
         )
 
+    async def has_outbound_messages(self, conversation: Conversation) -> bool:
+        db = await get_supabase()
+        response = (
+            await db.table("messages")
+            .select("id")
+            .eq("tenant_id", str(conversation.tenant_id))
+            .eq("conversation_id", str(conversation.id))
+            .eq("direction", MessageDirection.OUTBOUND.value)
+            .limit(1)
+            .execute()
+        )
+        return bool(response.data)
+
     async def update_conversation(self, conversation: Conversation) -> None:
         db = await get_supabase()
         await (

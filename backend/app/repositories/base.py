@@ -42,6 +42,10 @@ class ConversationStore(Protocol):
         """Salva una risposta inviata al cliente."""
         ...
 
+    async def has_outbound_messages(self, conversation: Conversation) -> bool:
+        """True se al cliente è già stata inviata almeno una risposta."""
+        ...
+
     async def update_conversation(self, conversation: Conversation) -> None:
         """Persiste state, mode, failed_attempts, context e customer_name."""
         ...

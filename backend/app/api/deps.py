@@ -62,7 +62,9 @@ def get_inbound_processor() -> InboundProcessor:
         notifier=WhatsAppOperatorNotifier(senders),
         booking_sync=get_google_calendar_service(),
     )
-    return InboundProcessor(store=store, engine=engine, senders=senders)
+    return InboundProcessor(
+        store=store, engine=engine, senders=senders, privacy_url=get_settings().privacy_url
+    )
 
 
 @lru_cache
@@ -73,4 +75,5 @@ def get_simulator_service() -> SimulatorService:
         interpreter=get_interpreter(),
         availability=get_availability(),
         booking_sync=get_google_calendar_service(),
+        privacy_url=get_settings().privacy_url,
     )

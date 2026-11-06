@@ -74,6 +74,11 @@ class Settings(BaseSettings):
         return self.environment == "production"
 
     @property
+    def privacy_url(self) -> str:
+        """Informativa privacy pubblica, ospitata dalla dashboard."""
+        return f"{self.frontend_url.rstrip('/')}/privacy"
+
+    @property
     def simulator_active(self) -> bool:
         return self.simulator_enabled and not self.is_production
 

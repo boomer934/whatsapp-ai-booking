@@ -12,16 +12,31 @@ from backend.app.services.messaging.base import MessagingClient
 logger = logging.getLogger(__name__)
 
 
+def ai_disclosure(privacy_url: str | None) -> str:
+    """Avviso sulla natura automatica delle risposte (AI Act, art. 50) e link
+    all'informativa privacy, aggiunto alla prima risposta inviata a ogni cliente."""
+    text = (
+        "Questo è un assistente automatico: le risposte sono generate da un sistema "
+        "di intelligenza artificiale. Puoi chiedere in qualsiasi momento di parlare "
+        "con una persona."
+    )
+    if privacy_url:
+        text += f" Informativa privacy: {privacy_url}"
+    return text
+
+
 class InboundProcessor:
     def __init__(
         self,
         store: ConversationStore,
         engine: ReplyEngine,
         senders: Mapping[MessagingProviderName, MessagingClient],
+        privacy_url: str | None = None,
     ) -> None:
         self._store = store
         self._engine = engine
         self._senders = senders
+        self._privacy_url = privacy_url
 
     async def process(self, message: InboundMessage) -> None:
         tenant = await self._store.get_tenant_by_routing_key(
@@ -47,6 +62,8 @@ class InboundProcessor:
         reply = await self._engine.reply(tenant, conversation, message)
         if not reply:
             return
+        if not await self._store.has_outbound_messages(conversation):
+            reply = f"{reply}\n\n{ai_disclosure(self._privacy_url)}"
 
         sender = self._senders[message.provider]
         provider_message_id = await sender.send_text(tenant, message.customer_phone, reply)

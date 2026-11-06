@@ -122,6 +122,9 @@ class FakeStore:
         self.outbound.append((conversation.id, body, provider_message_id))
         self.log.append((conversation.id, "outbound", body))
 
+    async def has_outbound_messages(self, conversation: Conversation) -> bool:
+        return any(conversation_id == conversation.id for conversation_id, _, _ in self.outbound)
+
 
 class FakeSender(MessagingClient):
     def __init__(self) -> None:
